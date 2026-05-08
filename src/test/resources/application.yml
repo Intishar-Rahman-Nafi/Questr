@@ -30,7 +30,7 @@ spring:
 
   # Use a fixed H2 datasource placeholder that Testcontainers will override.
   datasource:
-    url: jdbc:postgresql://localhost:5432/questr_test
+    url: jdbc:postgresql://localhost:5433/questr_test
     username: admin
     password: secret
 

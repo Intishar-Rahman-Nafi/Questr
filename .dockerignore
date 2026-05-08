@@ -1,0 +1,50 @@
+# QUESTR — Docker build context exclusions
+# Keeps Docker build context lean: only pom.xml + src/ are needed.
+
+# Maven build output (copied from inside the build stage instead)
+target/
+
+# Source control
+.git/
+.gitignore
+
+# IDE & Editor files
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+.classpath
+.project
+.settings/
+
+# Docker files (no recursive COPY needed)
+Dockerfile
+Dockerfile.*
+docker-compose*.yml
+.dockerignore
+
+# Dev environment
+.env
+*.env
+!.env.example
+
+# Frontend (built separately)
+frontend/
+
+# Documentation & plans
+*.md
+*.txt
+plan.txt
+
+# Logs & OS artefacts
+logs/
+*.log
+.DS_Store
+
+# GitHub CI
+.github/
+
+# Nginx configs (mounted as volume in prod)
+nginx/
+

@@ -1,0 +1,124 @@
+services:
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # PostgreSQL 15 — Primary Database
+  #   Host port 5433 avoids collision with any local Postgres on 5432.
+  #   Set DB_PORT=5433 in your .env when using this Docker service.
+  # ─────────────────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: questr-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: questr_db
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: secret
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5433:5432"       # host:container  (use DB_PORT=5433 in your .env)
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - questr-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d questr_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Redis 7 — Cache & Session Store
+  # ─────────────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: questr-redis
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - questr-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Apache Kafka 7.6 — Event Streaming (KRaft mode — no Zookeeper needed)
+  #
+  #   Two listeners:
+  #     PLAINTEXT://kafka:29092   → internal Docker network (app-in-Docker)
+  #     PLAINTEXT_HOST://localhost:9092 → host machine (app running locally)
+  #
+  #   CLUSTER_ID: base64-encoded 16-byte UUID, must be stable across restarts.
+  #   Generate a fresh one with: docker run --rm confluentinc/cp-kafka:7.6.1
+  #                                    kafka-storage random-uuid | base64
+  # ─────────────────────────────────────────────────────────────────────────
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: questr-kafka
+    restart: unless-stopped
+    ports:
+      - "9092:9092"       # PLAINTEXT_HOST — accessible from the host machine
+    environment:
+      # KRaft cluster identity
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+
+      # Listeners
+      KAFKA_LISTENERS: "PLAINTEXT://kafka:29092,CONTROLLER://kafka:29093,PLAINTEXT_HOST://0.0.0.0:9092"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:29093"
+
+      # Single-broker dev settings (replication factor 1)
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+      KAFKA_MIN_INSYNC_REPLICAS: 1
+
+      # Performance & operational settings
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_LOG_RETENTION_HOURS: 168      # 7 days
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824 # 1 GB
+      KAFKA_LOG_DIRS: "/var/lib/kafka/data"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - questr-net
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Named Volumes — persist data across container restarts
+# ─────────────────────────────────────────────────────────────────────────────
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  kafka_data:
+    driver: local
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Network — isolated bridge network for all QUESTR services
+# ─────────────────────────────────────────────────────────────────────────────
+networks:
+  questr-net:
+    driver: bridge
+    name: questr-net
+
