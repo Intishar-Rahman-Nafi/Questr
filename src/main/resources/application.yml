@@ -4,7 +4,7 @@ spring:
 
   # ── Database ─────────────────────────────────────────────────────────────────
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:questr_db}
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5433}/${DB_NAME:questr_db}
     username: ${DB_USER:admin}
     password: ${DB_PASSWORD:secret}
     driver-class-name: org.postgresql.Driver
@@ -19,7 +19,7 @@ spring:
   # ── JPA / Hibernate ───────────────────────────────────────────────────────────
   jpa:
     hibernate:
-      ddl-auto: validate          # Flyway owns the schema; Hibernate only validates
+      ddl-auto: none           # FlywayConfig owns the schema; Hibernate only uses it
     show-sql: false
     open-in-view: false           # Prevent lazy-load issues in controllers
     properties:

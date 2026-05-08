@@ -1,0 +1,51 @@
+package com.app.questr.repository;
+
+import com.app.questr.model.entity.ChallengeParticipant;
+import com.app.questr.model.entity.ChallengeParticipantId;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import java.util.List;
+import java.util.UUID;
+
+public interface ChallengeParticipantRepository
+        extends JpaRepository<ChallengeParticipant, ChallengeParticipantId> {
+
+    /**
+     * Leaderboard: all participants for a challenge sorted by XP descending.
+     * Called by {@code ChallengeService.getChallengeLeaderboard()}.
+     */
+    @Query("""
+        SELECT cp FROM ChallengeParticipant cp
+        WHERE  cp.challenge.id = :challengeId
+        ORDER  BY cp.currentXp DESC
+        """)
+    List<ChallengeParticipant> findLeaderboard(@Param("challengeId") UUID challengeId);
+
+    List<ChallengeParticipant> findByUserId(UUID userId);
+
+    boolean existsByIdChallengeIdAndIdUserId(UUID challengeId, UUID userId);
+
+    /**
+     * Atomically increment a participant's XP by {@code xpAmount}.
+     * Called from the Kafka XP-event consumer so we avoid a read-modify-write
+     * race condition.
+     *
+     * <p>{@code clearAutomatically = true} evicts the affected entity from the
+     * first-level (EntityManager) cache so subsequent {@code findById} calls
+     * return the freshly updated value rather than a stale cached copy.
+     */
+    @Modifying(clearAutomatically = true)
+    @Query("""
+        UPDATE ChallengeParticipant cp
+        SET    cp.currentXp = cp.currentXp + :xpAmount
+        WHERE  cp.id.challengeId = :challengeId
+        AND    cp.id.userId      = :userId
+        """)
+    int addXp(@Param("challengeId") UUID challengeId,
+              @Param("userId")      UUID userId,
+              @Param("xpAmount")    int xpAmount);
+}
+

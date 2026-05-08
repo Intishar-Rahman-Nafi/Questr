@@ -113,29 +113,51 @@
 		</dependency>
 
 		<!-- ===== TEST DEPENDENCIES ===== -->
+		<!--
+		  Spring Boot 4 uses a fully modular test-slice architecture.
+		  Each technology domain has its own test starter that provides
+		  the equivalent of old @DataJpaTest, @WebMvcTest, etc.
+		  New packages: org.springframework.boot.data.jpa.test.autoconfigure.*
+		                org.springframework.boot.jdbc.test.autoconfigure.*
+		                org.springframework.boot.webmvc.test.autoconfigure.*
+		-->
 
-		<!-- Core test framework: JUnit 5, Mockito, AssertJ, MockMvc -->
+		<!-- Core test framework: JUnit 5, Mockito, AssertJ, MockMvc base -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-test</artifactId>
 			<scope>test</scope>
 		</dependency>
 
-		<!-- Spring Security test utilities (csrf, user mocking) -->
+		<!-- JPA slice test: @DataJpaTest + @AutoConfigureTestDatabase (SB4 new package) -->
 		<dependency>
-			<groupId>org.springframework.security</groupId>
-			<artifactId>spring-security-test</artifactId>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-jpa-test</artifactId>
 			<scope>test</scope>
 		</dependency>
 
-		<!-- Spring Kafka test utilities (EmbeddedKafka) -->
+		<!-- WebMVC slice test: @WebMvcTest + MockMvc (SB4 new package) -->
 		<dependency>
-			<groupId>org.springframework.kafka</groupId>
-			<artifactId>spring-kafka-test</artifactId>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-webmvc-test</artifactId>
 			<scope>test</scope>
 		</dependency>
 
-		<!-- Testcontainers BOM managed by Spring Boot parent -->
+		<!-- Security test: withMockUser, csrf etc. (SB4 new package) -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-security-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!-- Kafka test: EmbeddedKafka (SB4 new package) -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-kafka-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!-- Testcontainers: real Postgres + Kafka in integration tests -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-testcontainers</artifactId>
