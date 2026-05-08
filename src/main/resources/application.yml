@@ -1,0 +1,158 @@
+spring:
+  application:
+    name: questr
+
+  # ── Database ─────────────────────────────────────────────────────────────────
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:questr_db}
+    username: ${DB_USER:admin}
+    password: ${DB_PASSWORD:secret}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      pool-name: QuestrHikariPool
+
+  # ── JPA / Hibernate ───────────────────────────────────────────────────────────
+  jpa:
+    hibernate:
+      ddl-auto: validate          # Flyway owns the schema; Hibernate only validates
+    show-sql: false
+    open-in-view: false           # Prevent lazy-load issues in controllers
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        jdbc:
+          time_zone: UTC
+        default_batch_fetch_size: 20
+
+  # ── Flyway Migrations ─────────────────────────────────────────────────────────
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    validate-on-migrate: true
+    out-of-order: false
+
+  # ── Redis ─────────────────────────────────────────────────────────────────────
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 2
+          max-wait: -1ms
+
+  # ── Cache (Redis-backed) ──────────────────────────────────────────────────────
+  cache:
+    type: redis
+    redis:
+      time-to-live: 300000        # Default TTL: 5 minutes (ms); overridden per cache
+
+  # ── Kafka ─────────────────────────────────────────────────────────────────────
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all                   # Wait for all replicas to acknowledge
+      retries: 3
+      properties:
+        spring.json.add.type.headers: false
+    consumer:
+      group-id: questr-consumer-group
+      auto-offset-reset: earliest
+      enable-auto-commit: false   # Manual offset commit for reliability
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.app.questr.*"
+    listener:
+      ack-mode: MANUAL_IMMEDIATE  # Pair with enable-auto-commit: false
+
+# ── Server ──────────────────────────────────────────────────────────────────────
+server:
+  port: ${SERVER_PORT:8080}
+  error:
+    include-message: always
+    include-binding-errors: always
+    include-stacktrace: never     # Never leak stack traces to clients
+  compression:
+    enabled: true
+    mime-types: application/json,application/xml,text/html,text/plain
+    min-response-size: 1024
+
+# ── JWT ─────────────────────────────────────────────────────────────────────────
+jwt:
+  secret: ${JWT_SECRET:questr-dev-secret-needs-to-be-at-least-32-chars-long-for-hs256-algo}
+  expiration: ${JWT_EXPIRATION_MS:86400000}          # 24 hours in ms
+  refresh-expiration: ${JWT_REFRESH_EXPIRATION_MS:604800000}  # 7 days in ms
+
+# ── OpenAI ──────────────────────────────────────────────────────────────────────
+openai:
+  api-key: ${OPENAI_API_KEY:}
+  model: ${OPENAI_MODEL:gpt-4o-mini}
+  base-url: https://api.openai.com/v1
+  timeout-seconds: 30
+  max-tokens: 1000
+  temperature: 0.7
+
+# ── Spring Actuator ─────────────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,loggers
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when-authorized
+      show-components: when-authorized
+  info:
+    env:
+      enabled: true
+
+info:
+  app:
+    name: QUESTR
+    description: "Turn your day into a quest — Gamified Productivity Tracker"
+    version: "@project.version@"
+
+# ── Logging ─────────────────────────────────────────────────────────────────────
+logging:
+  level:
+    com.app.questr: DEBUG
+    org.springframework.security: INFO
+    org.springframework.kafka: INFO
+    org.hibernate.SQL: INFO
+    org.hibernate.type.descriptor.sql: INFO
+    org.flywaydb: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
+---
+# ── PRODUCTION PROFILE ──────────────────────────────────────────────────────────
+spring:
+  config:
+    activate:
+      on-profile: prod
+  jpa:
+    show-sql: false
+  flyway:
+    out-of-order: false
+
+logging:
+  level:
+    com.app.questr: INFO
+    org.springframework.security: WARN
+    org.hibernate.SQL: WARN
+
