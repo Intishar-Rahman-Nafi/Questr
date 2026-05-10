@@ -1,4 +1,95 @@
 Complete Full-Stack Productivity Tracker with Gamification - Build Plan
+
+Module 0 — Fix pom.xml & Project Foundation
+Fix pom.xml: Remove the 7 invalid *-test starters (they don't exist); replace with spring-boot-starter-test, spring-security-test, spring-kafka-test, and Testcontainers (Postgres + Redis).
+Uncomment spring-boot-starter-data-jpa, spring-boot-starter-data-redis, spring-boot-starter-kafka in the main dependencies block.
+Add io.jsonwebtoken:jjwt-api/impl/jackson (JWT library) and org.flywaydb:flyway-core (DB migrations) dependencies.
+Convert application.properties → application.yml with full datasource, Redis, Kafka, JWT, and OpenAI config blocks (using env var placeholders like ${DB_PASSWORD}); add a dev profile with local defaults.
+✅ Test: mvn clean compile passes with zero errors.
+
+Module 1 — Infrastructure (Docker Compose)
+Create docker-compose.yml at project root with services: postgres:15-alpine, redis:7-alpine, zookeeper (Confluent), kafka (Confluent) — all with health checks and named volumes.
+Create .env.example documenting all required environment variables.
+✅ Test: docker-compose up -d → all 4 containers healthy; psql and redis-cli ping succeed.
+
+Module 2 — Domain Entities & DB Migrations (JPA + Flyway)
+Create package structure: config/, controller/, service/, repository/, model/entity/, model/dto/, model/enums/, security/, exception/ under com.app.questr.
+Create enums: TaskCategory (WORK, PERSONAL, HEALTH, LEARNING, DEV, OTHER), BadgeType (STREAK, XP_MILESTONE, TASK_COUNT, SPECIAL).
+Create JPA entities: User, Task, UserStats, Badge, UserBadge, Challenge, ChallengeParticipant — all using @GeneratedValue(UUID), Lombok @Data/@Builder/@NoArgsConstructor/@AllArgsConstructor, and proper @OneToMany/@ManyToOne relationships with Lazy fetching.
+Create Flyway migrations in src/main/resources/db/migration/: V1__create_users.sql, V2__create_tasks.sql, V3__create_gamification.sql, V4__create_challenges.sql, V5__seed_badges.sql (seed 15+ default badges).
+Create Spring Data JPA repositories for all entities with needed custom @Query methods (e.g., findTasksForWeek, getCategoryBreakdown, countByUserIdAndCompletedTrue).
+✅ Test: @DataJpaTest with Testcontainers Postgres — CRUD for each entity, Flyway migrations run correctly, custom queries return expected results.
+
+Module 3 — Authentication & JWT Security
+Create JwtTokenProvider: generateToken(UserDetails), validateToken(String), getUsernameFromToken(String) using JJWT (HS256, 256-bit key from config).
+Create JwtAuthenticationFilter extends OncePerRequestFilter — extracts Bearer token, validates it, sets SecurityContext.
+Create UserDetailsServiceImpl implementing UserDetailsService — loads user by email from UserRepository.
+Create SecurityConfig (@EnableWebSecurity): permit /api/auth/** and /actuator/health; protect all other routes; stateless session; add JWT filter; configure BCryptPasswordEncoder bean.
+Create DTOs: SignupRequest (username, email, password with @Valid constraints), LoginRequest, AuthResponse (token, userId, username, expiresAt).
+Create AuthService: register() (check duplicate email/username → hash password with BCrypt → create User + UserStats atomically → return JWT), login() (authenticate → return JWT).
+Create AuthController at /api/auth with POST /signup and POST /login.
+✅ Test: @SpringBootTest + MockMvc — signup creates user + stats in DB, login returns valid JWT, protected endpoint returns 401 without token and 200 with it, duplicate email returns 409.
+
+Module 4 — Task Management CRUD
+Create TaskDTO (request/response), TaskFilter (category, priority, completed status params).
+Create TaskService: createTask(), getUserTasks() (with filter/pagination), updateTask(), deleteTask(), completeTask() — completeTask() sets completedAt, calculates dynamic xpValue based on priority (HIGH=20, MEDIUM=10, LOW=5) + deadline proximity, then calls GamificationService.awardXP().
+Create TaskController at /api/tasks: GET / (all tasks, filter params), POST / (create), PUT /{id} (update), DELETE /{id}, PATCH /{id}/complete — all require authentication; user can only touch their own tasks (ownership check).
+Create GlobalExceptionHandler (@RestControllerAdvice) handling ResourceNotFoundException (404), UnauthorizedException (403), DuplicateResourceException (409), ConstraintViolationException (400) — all return consistent ApiError { timestamp, status, message, path } shape.
+✅ Test: MockMvc integration tests — create/read/update/delete tasks, verify XP awarded on complete, verify 403 on other user's task, verify filter/pagination works.
+
+Module 5 — Gamification Engine (XP, Levels, Streaks, Badges)
+Create XPUpdateEvent (Kafka event POJO): userId, xpGained, newTotal, newLevel, timestamp.
+Create KafkaConfig: producer config (JSON serializer), consumer config, topic definitions (xp-events, badge-events).
+Create RedisConfig: RedisTemplate<String, Object> bean with Jackson serializer; CacheManager with TTLs.
+Implement GamificationService.awardXP(): update UserStats (XP + level using √ formula), publish XPUpdateEvent to Kafka, cache updated stats in Redis (1h TTL), call checkAndAwardBadges().
+Implement checkAndAwardBadges(): evaluate all badge conditions (FIRST_TASK, TASK_MASTER_50, STREAK_3/7/30/100, LEVEL_5/10, XP_1000, special time-based badges) — idempotent (skip if already earned).
+Implement @Scheduled streak updater (midnight cron): iterate all UserStats, increment/reset streaks based on lastActivityDate; update lastActivityDate in completeTask().
+Create Kafka consumer GamificationEventConsumer: listen to xp-events → log, update challenge participant XP, trigger notifications.
+Create AchievementController at /api/achievements: GET / (user's earned badges + locked with progress hints), GET /leaderboard (top 10 by XP).
+✅ Test: Service unit tests (Mockito mock repos/Kafka/Redis), verify level-up formula, streak increment/reset, badge award idempotency; integration test with EmbeddedKafka + Redis Testcontainer.
+
+Module 6 — Dashboard Analytics
+Implement DashboardService.getUserDashboard(): Redis cache first (5-min TTL) → fetch UserStats + weekly task completions (Mon–Sun) + category breakdown → build DashboardDTO.
+DashboardDTO: totalXp, level, xpToNextLevel, currentStreak, longestStreak, tasksCompleted, completionRate, weeklyCompletions[{day, count}], categoryBreakdown[{category, count, percentage}].
+Create DashboardController at /api/dashboard: GET / returns dashboard DTO; GET /history?weeks=4 returns multi-week trend data.
+✅ Test: MockMvc + mock Redis → verify cache hit/miss behavior, verify correct weekly aggregation, verify XP-to-next-level calculation formula.
+
+Module 7 — Social Challenges
+Create ChallengeService: createChallenge() (creator auto-joins), joinChallenge(code) (invite-code pattern), getChallengeLeaderboard() (sorted by currentXp), updateParticipantXP() (called from Kafka consumer when XP event fires).
+Create ChallengeController at /api/challenges: POST / (create), POST /join (join by code), GET / (user's active challenges), GET /{id}/leaderboard, DELETE /{id} (creator only).
+✅ Test: Integration test — create challenge → join → complete tasks → verify leaderboard ordering updates.
+
+Module 8 — OpenAI Weekly AI Report
+Add spring-boot-starter-webflux dependency (for reactive WebClient); configure OpenAIConfig bean with WebClient targeting api.openai.com, Bearer token from ${OPENAI_API_KEY}.
+Implement OpenAIService.generateWeeklyReport(userId): gather this week's tasks + stats → build system+user prompt → call gpt-4o-mini via WebClient → parse JSON response → return AIReportDTO; implement getFallbackReport() for API failures.
+AIReportDTO: summary, tips[], improvements, quote, weekStart, weekEnd, generatedAt.
+Create ReportController at /api/reports: GET /weekly (generate or return cached — Redis 24h TTL per user-week key), POST /weekly/regenerate (force refresh, rate-limited to 1/day).
+✅ Test: Mock WebClient → verify prompt construction contains correct user data, verify fallback triggers on API error, verify 24h caching prevents re-generation.
+
+Module 9 — Frontend (React + Vite + TypeScript)
+Scaffold frontend/ with npm create vite@latest -- --template react-ts; install: axios, react-router-dom v6, @tanstack/react-query v5, zustand (auth state), recharts (charts), shadcn/ui (component library), framer-motion (animations), date-fns.
+Set up api.ts Axios instance with request interceptor (attach JWT) and response interceptor (401 → redirect to login).
+Build Auth pages (LoginForm, SignupForm) with form validation, loading/error states, success redirect.
+Build Dashboard page: XP level bar (animated), streak counter with fire animation, weekly bar chart (Recharts), category donut chart, today's tasks quickview.
+Build Tasks page: filterable/sortable task list by priority/category, TaskCard with checkbox (completion triggers floating +XP animation via framer-motion), TaskForm modal (create/edit).
+Build Achievements page: BadgeGrid with locked/unlocked states, badge unlock full-screen modal, overall progress bar.
+Build Challenges page: active challenge cards with live leaderboards, create/join challenge modals.
+Build AI Report page: weekly report card with animated text reveal, share button, regenerate button.
+Add Navbar + Sidebar layout, protected route wrapper, mobile-responsive bottom nav.
+✅ Test: Run npm run dev → manually exercise all flows; run vitest unit tests for hooks and utility functions.
+
+Module 10 — Dockerization, Nginx & Production Readiness
+Write multi-stage Dockerfile (Maven build stage → slim JRE runtime) for backend; write nginx.conf for reverse proxy + static frontend serving + gzip.
+Write docker-compose.prod.yml with all services (postgres, redis, kafka, backend, nginx), health checks, named networks, and depends_on ordering.
+Add Dockerfile for frontend (node:20-alpine build → nginx:alpine serve).
+Write docker-compose.override.yml for local dev (hot-reload mounts, no nginx).
+Add .github/workflows/deploy.yml CI/CD: build on push to main → Docker build → push to registry → SSH deploy.
+✅ Test: docker-compose -f docker-compose.prod.yml up --build → all endpoints accessible through Nginx on port 80.
+
+Further Considerations
+pom.xml critical fix first: The 7 test starters (spring-boot-starter-actuator-test, etc.) are invalid and will break mvn compile — this must be fixed in Module 0 before anything else runs.
+OpenAI API key: Module 8 needs a real OPENAI_API_KEY to test the live path; we can mock it in tests and defer live testing — do you have a key ready, or should we default to the fallback-only mode initially?
+Frontend scope: Should the frontend be in the same repo (monorepo with frontend/ folder) or a separate repo? Monorepo is simpler for this session.
 📊 Project Architecture Diagram
 text
 ┌─────────────────────────────────────────────────────────────────────────────┐

@@ -81,5 +81,27 @@ public interface TaskRepository extends JpaRepository<Task, UUID> {
     List<Task> findTasksForWeek(
         @Param("userId")    UUID userId,
         @Param("weekStart") LocalDateTime weekStart);
+
+    /**
+     * Dynamic filter query used by TaskService.getUserTasks().
+     * Any null parameter acts as "no filter" on that column.
+     */
+    @Query("""
+        SELECT t FROM Task t
+        WHERE  t.user.id = :userId
+        AND    (:completed IS NULL OR t.completed = :completed)
+        AND    (:category  IS NULL OR t.category  = :category)
+        AND    (:priority  IS NULL OR t.priority  = :priority)
+        ORDER  BY t.createdAt DESC
+        """)
+    Page<Task> findByUserIdWithFilters(
+        @Param("userId")    UUID userId,
+        @Param("completed") Boolean completed,
+        @Param("category")  TaskCategory category,
+        @Param("priority")  TaskPriority priority,
+        Pageable pageable);
+
+    /** Ownership check: does this task belong to this user? */
+    boolean existsByIdAndUserId(UUID taskId, UUID userId);
 }
 
