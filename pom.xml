@@ -112,6 +112,11 @@
 			<optional>true</optional>
 		</dependency>
 
+		<dependency>
+			<groupId>com.fasterxml.jackson.datatype</groupId>
+			<artifactId>jackson-datatype-jsr310</artifactId>
+		</dependency>
+
 		<!-- ===== TEST DEPENDENCIES ===== -->
 		<!--
 		  Spring Boot 4 uses a fully modular test-slice architecture.
@@ -176,11 +181,6 @@
 		<dependency>
 			<groupId>org.testcontainers</groupId>
 			<artifactId>junit-jupiter</artifactId>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>com.fasterxml.jackson.datatype</groupId>
-			<artifactId>jackson-datatype-jsr310</artifactId>
 			<scope>test</scope>
 		</dependency>
 
