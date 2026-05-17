@@ -101,6 +101,26 @@ public interface TaskRepository extends JpaRepository<Task, UUID> {
         @Param("priority")  TaskPriority priority,
         Pageable pageable);
 
+    /**
+     * Completed-task count grouped by ISO week start (Monday) for the history chart.
+     * Uses {@code DATE_TRUNC('week', ...)} which returns the Monday of each week.
+     * Reuses {@link DailyCompletionProjection}: {@code getDay()} = Monday of that week,
+     * {@code getCount()} = tasks completed in that week.
+     */
+    @Query(value = """
+        SELECT DATE(DATE_TRUNC('week', completed_at)) AS day,
+               COUNT(*)                               AS count
+        FROM   tasks
+        WHERE  user_id     = :userId
+        AND    completed   = true
+        AND    completed_at >= :since
+        GROUP  BY DATE_TRUNC('week', completed_at)
+        ORDER  BY day
+        """, nativeQuery = true)
+    List<DailyCompletionProjection> getWeeklyHistoryCompletions(
+        @Param("userId") UUID userId,
+        @Param("since")  LocalDateTime since);
+
     /** Ownership check: does this task belong to this user? */
     boolean existsByIdAndUserId(UUID taskId, UUID userId);
 }

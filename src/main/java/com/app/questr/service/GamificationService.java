@@ -45,8 +45,9 @@ import java.util.UUID;
 @Slf4j
 public class GamificationService {
 
-    private static final String   STATS_CACHE_PREFIX = "user-stats:";
-    private static final Duration STATS_CACHE_TTL    = Duration.ofHours(1);
+    private static final String   STATS_CACHE_PREFIX     = "user-stats:";
+    private static final String   DASHBOARD_CACHE_PREFIX = "dashboard:";
+    private static final Duration STATS_CACHE_TTL        = Duration.ofHours(1);
 
     private final UserStatsRepository                  userStatsRepository;
     private final BadgeRepository                      badgeRepository;
@@ -104,6 +105,10 @@ public class GamificationService {
 
         // 7. Cache latest stats in Redis (best-effort)
         cacheStats(userId, stats);
+
+        // 8. Invalidate the dashboard cache so the next GET /dashboard reflects
+        //    the updated XP / level / streak immediately (best-effort).
+        evictDashboardCache(userId);
 
         log.info("XP +{} user={} total={} level={} streak={}",
                 xpAmount, userId, stats.getTotalXp(), stats.getLevel(), stats.getCurrentStreak());
@@ -224,6 +229,14 @@ public class GamificationService {
             redisTemplate.delete(STATS_CACHE_PREFIX + userId);
         } catch (Exception e) {
             log.warn("Redis eviction failed for user {}: {}", userId, e.getMessage());
+        }
+    }
+
+    private void evictDashboardCache(UUID userId) {
+        try {
+            redisTemplate.delete(DASHBOARD_CACHE_PREFIX + userId);
+        } catch (Exception e) {
+            log.warn("Redis dashboard cache eviction failed for user {}: {}", userId, e.getMessage());
         }
     }
 }
