@@ -16,9 +16,13 @@ public interface ChallengeParticipantRepository
     /**
      * Leaderboard: all participants for a challenge sorted by XP descending.
      * Called by {@code ChallengeService.getChallengeLeaderboard()}.
+     *
+     * <p>JOIN FETCH cp.user eagerly loads the User entity in a single query,
+     * preventing N+1 SELECT statements when mapping usernames in the service.
      */
     @Query("""
         SELECT cp FROM ChallengeParticipant cp
+        JOIN   FETCH cp.user
         WHERE  cp.challenge.id = :challengeId
         ORDER  BY cp.currentXp DESC
         """)
@@ -27,6 +31,9 @@ public interface ChallengeParticipantRepository
     List<ChallengeParticipant> findByUserId(UUID userId);
 
     boolean existsByIdChallengeIdAndIdUserId(UUID challengeId, UUID userId);
+
+    /** Total number of participants in a challenge — used in response DTOs. */
+    long countByIdChallengeId(UUID challengeId);
 
     /**
      * Atomically increment a participant's XP by {@code xpAmount}.
