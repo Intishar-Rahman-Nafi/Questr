@@ -8,6 +8,7 @@ import com.app.questr.exception.ResourceNotFoundException;
 import com.app.questr.model.entity.UserStats;
 import com.app.questr.model.projection.CategoryBreakdownProjection;
 import com.app.questr.model.projection.DailyCompletionProjection;
+import com.app.questr.model.projection.DailyXpProjection;
 import com.app.questr.repository.TaskRepository;
 import com.app.questr.repository.UserStatsRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -80,8 +81,10 @@ public class DashboardService {
 
         List<DailyCompletionProjection> rawDaily =
                 taskRepository.getWeeklyCompletions(userId, queryFrom);
+        List<DailyXpProjection> rawXp =
+                taskRepository.getWeeklyXpEarned(userId, queryFrom);
         List<WeeklyCompletionEntry> weeklyCompletions =
-                buildWeeklyEntries(rawDaily, weekStart);
+                buildWeeklyEntries(rawDaily, rawXp, weekStart);
 
         // 4. Category breakdown
         List<CategoryBreakdownProjection> rawCategories =
@@ -175,15 +178,22 @@ public class DashboardService {
 
     /**
      * Returns exactly 7 entries (Mon–Sun) for the current week, backfilling
-     * days with zero completions.
+     * days with zero completions and zero XP.
      */
     private List<WeeklyCompletionEntry> buildWeeklyEntries(
-            List<DailyCompletionProjection> raw, LocalDate weekStart) {
+            List<DailyCompletionProjection> raw,
+            List<DailyXpProjection> rawXp,
+            LocalDate weekStart) {
 
         Map<LocalDate, Long> byDay = raw.stream()
                 .collect(Collectors.toMap(
                         DailyCompletionProjection::getDay,
                         DailyCompletionProjection::getCount));
+
+        Map<LocalDate, Long> xpByDay = rawXp.stream()
+                .collect(Collectors.toMap(
+                        DailyXpProjection::getDay,
+                        DailyXpProjection::getXp));
 
         List<WeeklyCompletionEntry> result = new ArrayList<>(7);
         for (int i = 0; i < 7; i++) {
@@ -191,7 +201,8 @@ public class DashboardService {
             result.add(new WeeklyCompletionEntry(
                     date.getDayOfWeek().name(),
                     date,
-                    byDay.getOrDefault(date, 0L)));
+                    byDay.getOrDefault(date, 0L),
+                    xpByDay.getOrDefault(date, 0L)));
         }
         return result;
     }

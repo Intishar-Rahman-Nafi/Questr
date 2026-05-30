@@ -101,7 +101,7 @@ export const achievementsApi = {
 
 // ── Dashboard ──────────────────────────────────────────────────────────────
 // Backend DashboardResponse fields:
-//   weeklyCompletions: [{dayOfWeek, date, count}]  (7 days, current week)
+//   weeklyCompletions: [{dayOfWeek, date, count, xpEarned}]  (7 days, current week)
 //   categoryBreakdown: [{category, count, percentage}]
 // Frontend DashboardResponse expects:
 //   activityGrid: [{date, tasksCompleted, xpEarned}]
@@ -113,7 +113,7 @@ function adaptDashboard(raw: any) {
     activityGrid: weekly.map((d: any) => ({
       date:           d.date ?? '',
       tasksCompleted: d.count ?? 0,
-      xpEarned:       0,  // backend doesn't provide per-day XP in this endpoint
+      xpEarned:       d.xpEarned ?? 0,
     })),
   }
 }

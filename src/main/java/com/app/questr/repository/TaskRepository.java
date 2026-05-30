@@ -5,6 +5,7 @@ import com.app.questr.model.enums.TaskCategory;
 import com.app.questr.model.enums.TaskPriority;
 import com.app.questr.model.projection.CategoryBreakdownProjection;
 import com.app.questr.model.projection.DailyCompletionProjection;
+import com.app.questr.model.projection.DailyXpProjection;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -120,6 +121,24 @@ public interface TaskRepository extends JpaRepository<Task, UUID> {
     List<DailyCompletionProjection> getWeeklyHistoryCompletions(
         @Param("userId") UUID userId,
         @Param("since")  LocalDateTime since);
+
+    /**
+     * Total XP earned per calendar day for the given user, starting from {@code weekStart}.
+     * Only completed tasks with a non-null {@code completedAt} are counted.
+     */
+    @Query(value = """
+        SELECT DATE(completed_at)    AS day,
+               SUM(xp_value)         AS xp
+        FROM   tasks
+        WHERE  user_id      = :userId
+        AND    completed    = true
+        AND    completed_at >= :weekStart
+        GROUP  BY DATE(completed_at)
+        ORDER  BY day
+        """, nativeQuery = true)
+    List<DailyXpProjection> getWeeklyXpEarned(
+        @Param("userId")    UUID userId,
+        @Param("weekStart") LocalDateTime weekStart);
 
     /** Ownership check: does this task belong to this user? */
     boolean existsByIdAndUserId(UUID taskId, UUID userId);
