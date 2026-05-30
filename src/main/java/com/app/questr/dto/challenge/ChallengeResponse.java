@@ -27,6 +27,8 @@ public record ChallengeResponse(
         boolean         active,
         boolean         creator,
         /** true when the requesting user is currently a participant (including creator) */
-        boolean         joined
+        boolean         joined,
+        /** the requesting user's accumulated XP in this challenge (0 if not a participant) */
+        int             myCurrentXp
 ) {}
 

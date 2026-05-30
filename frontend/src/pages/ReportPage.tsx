@@ -1,6 +1,7 @@
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Brain, RefreshCw, Lightbulb, TrendingUp, Quote, Calendar, Sparkles, AlertTriangle } from 'lucide-react'
+import { Brain, RefreshCw, Lightbulb, TrendingUp, Quote, Calendar, Sparkles, AlertTriangle, Clock } from 'lucide-react'
 import { toast } from 'sonner'
 import { reportApi } from '@/api'
 import { queryKeys } from '@/lib/queryKeys'
@@ -43,6 +44,8 @@ function ReportSkeleton() {
 // ── Page ──────────────────────────────────────────────────────────────────
 export function ReportPage() {
   const qc = useQueryClient()
+  // Track rate-limit state so button becomes disabled after a 429
+  const [rateLimited, setRateLimited] = useState(false)
 
   const { data: report, isLoading, isError } = useQuery({
     queryKey: queryKeys.report,
@@ -54,9 +57,21 @@ export function ReportPage() {
     mutationFn: reportApi.regenerate,
     onSuccess: (data) => {
       qc.setQueryData(queryKeys.report, data)
+      setRateLimited(false)
       toast.success('AI Report regenerated! ✨')
     },
-    onError: () => toast.error('Could not regenerate report. Try again later.'),
+    onError: (err: any) => {
+      const status = err?.response?.status
+      if (status === 429) {
+        const msg: string =
+          err?.response?.data?.message ??
+          'You have reached the daily regeneration limit (3 per day). Try again tomorrow.'
+        setRateLimited(true)
+        toast.error(msg, { duration: 6000 })
+      } else {
+        toast.error('Could not regenerate report. Try again later.')
+      }
+    },
   })
 
   if (isLoading) return <ReportSkeleton />
@@ -70,9 +85,9 @@ export function ReportPage() {
       <p className="text-slate-400 text-sm max-w-sm">
         Complete some tasks this week to generate your first AI-powered weekly report!
       </p>
-      <button onClick={() => regenMut.mutate()} disabled={regenMut.isPending} className="btn-brand">
+      <button onClick={() => regenMut.mutate()} disabled={regenMut.isPending || rateLimited} className="btn-brand">
         {regenMut.isPending ? <Spinner size="sm" /> : <Brain className="w-4 h-4" />}
-        Generate Report
+        {rateLimited ? 'Daily limit reached' : 'Generate Report'}
       </button>
     </div>
   )
@@ -100,15 +115,20 @@ export function ReportPage() {
 
         <button
           onClick={() => regenMut.mutate()}
-          disabled={regenMut.isPending}
+          disabled={regenMut.isPending || rateLimited}
+          title={rateLimited ? 'Daily regeneration limit reached. Try again tomorrow.' : undefined}
           className={cn(
             'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all border',
-            'text-slate-300 hover:text-white bg-white/5 hover:bg-white/8 border-white/10 hover:border-white/20',
+            rateLimited
+              ? 'text-slate-500 bg-white/3 border-white/5 cursor-not-allowed'
+              : 'text-slate-300 hover:text-white bg-white/5 hover:bg-white/8 border-white/10 hover:border-white/20',
           )}
         >
           {regenMut.isPending
             ? <><Spinner size="sm" /><span>Generating…</span></>
-            : <><RefreshCw className="w-4 h-4" /><span>Regenerate</span></>
+            : rateLimited
+              ? <><Clock className="w-4 h-4" /><span>Limit reached</span></>
+              : <><RefreshCw className="w-4 h-4" /><span>Regenerate</span></>
           }
         </button>
       </motion.div>

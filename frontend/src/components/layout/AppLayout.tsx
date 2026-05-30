@@ -1,13 +1,16 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, CheckSquare, Trophy, Swords, Brain,
   Zap, LogOut, ChevronLeft, ChevronRight, Menu, X, User,
 } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/store/authStore'
 import { cn } from '@/lib/cn'
 import { toast } from 'sonner'
+import { dashboardApi, achievementsApi, challengesApi } from '@/api'
+import { queryKeys } from '@/lib/queryKeys'
 
 const NAV = [
   { path: '/dashboard',   label: 'Dashboard',    icon: LayoutDashboard },
@@ -134,6 +137,17 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false)
   const [drawer,    setDrawer]    = useState(false)
   const location = useLocation()
+  const qc = useQueryClient()
+
+  // Pre-fetch all primary page data as soon as the user is authenticated.
+  // This ensures every page has data in the React Query cache before the user
+  // navigates to it, eliminating blank/loading screens during navigation.
+  useEffect(() => {
+    qc.prefetchQuery({ queryKey: queryKeys.dashboard,    queryFn: dashboardApi.get })
+    qc.prefetchQuery({ queryKey: queryKeys.achievements, queryFn: achievementsApi.list })
+    qc.prefetchQuery({ queryKey: queryKeys.challenges(), queryFn: challengesApi.list })
+    qc.prefetchQuery({ queryKey: queryKeys.myChallenges, queryFn: challengesApi.my })
+  }, [qc])
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -178,10 +192,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <AnimatePresence mode="wait">
             <motion.div
               key={location.pathname}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{   opacity: 0, y: -8 }}
-              transition={{ duration: 0.18 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{   opacity: 0 }}
+              transition={{ duration: 0.1 }}
               className="min-h-full"
             >
               {children}

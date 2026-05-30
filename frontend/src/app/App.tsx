@@ -36,7 +36,12 @@ class ErrorBoundary extends React.Component<
 
 const qc = new QueryClient({
   defaultOptions: {
-    queries:   { retry: 1, staleTime: 30_000, refetchOnWindowFocus: true },
+    queries: {
+      retry: 1,
+      staleTime:  30_000,           // data stays fresh for 30s
+      gcTime:     10 * 60 * 1000,   // keep data in cache for 10 min (prevents blank on re-navigation)
+      refetchOnWindowFocus: true,
+    },
     mutations: { retry: 0 },
   },
 })

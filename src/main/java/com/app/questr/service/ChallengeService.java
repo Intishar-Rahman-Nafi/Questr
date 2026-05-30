@@ -271,14 +271,16 @@ public class ChallengeService {
         boolean       active   = c.getStartDate().isBefore(now) && c.getEndDate().isAfter(now);
         boolean       isCreator = c.getCreatedBy().getId().equals(requestingUserId);
 
-        // Use a count query instead of c.getParticipants().size() to avoid the
-        // Hibernate L1-cache issue where the in-memory participants collection
-        // may be stale after a separate participantRepository.save() call.
         int participantCount = (int) participantRepository.countByIdChallengeId(c.getId());
 
         // The creator is always a participant; for others, look up the DB
         boolean joined = isCreator ||
                 participantRepository.existsByIdChallengeIdAndIdUserId(c.getId(), requestingUserId);
+
+        // Fetch the requesting user's accumulated XP in this challenge (0 if not a participant)
+        int myCurrentXp = participantRepository
+                .findCurrentXp(c.getId(), requestingUserId)
+                .orElse(0);
 
         return new ChallengeResponse(
                 c.getId(),
@@ -294,7 +296,8 @@ public class ChallengeService {
                 participantCount,
                 active,
                 isCreator,
-                joined);
+                joined,
+                myCurrentXp);
     }
 
     /**

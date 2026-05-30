@@ -172,7 +172,13 @@ export function ChallengeDetailPage() {
   const joined      = challenge.joined ?? false
   const isCreator   = challenge.creator ?? false
   const sortedPart  = [...(challenge.participants ?? [])].sort((a, b) => a.rank - b.rank)
-  const myProgress  = challenge.myCurrentXp ?? 0
+
+  // myCurrentXp is NOT in ChallengeResponse — derive it from the leaderboard participants
+  // (the leaderboard is fetched in challengesApi.get() and mapped into challenge.participants)
+  const myEntry     = sortedPart.find(p => p.userId === userId)
+  const myProgress  = myEntry?.currentXp ?? challenge.myCurrentXp ?? 0
+  const myRankVal   = myEntry?.rank ?? challenge.myRank
+
   const progressPct = Math.min(100, Math.round((myProgress / challenge.targetXp) * 100))
   const daysLeft    = Math.max(0, Math.ceil((new Date(challenge.endDate).getTime() - Date.now()) / 86_400_000))
 
@@ -243,7 +249,7 @@ export function ChallengeDetailPage() {
             <h3 className="text-sm font-semibold text-white flex items-center gap-2">
               <Trophy className="w-4 h-4 text-brand-400" />Your Progress
             </h3>
-            <span className="text-xs text-slate-500">Rank #{challenge.myRank ?? '—'}</span>
+            <span className="text-xs text-slate-500">Rank #{myRankVal ?? '—'}</span>
           </div>
           <div className="flex items-center justify-between text-xs mb-1">
             <span className="text-slate-500">{myProgress.toLocaleString()} / {challenge.targetXp.toLocaleString()} XP</span>

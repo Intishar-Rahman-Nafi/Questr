@@ -236,8 +236,13 @@ export function TasksPage() {
   const completeMut = useMutation({
     mutationFn: (id: string) => tasksApi.complete(id),
     onSuccess: (data) => {
+      // Invalidate tasks + all data affected by XP/achievement changes from the backend
       qc.invalidateQueries({ queryKey: queryKeys.tasks() })
       qc.invalidateQueries({ queryKey: queryKeys.dashboard })
+      // Task completion triggers Kafka XP event → achievements may unlock, challenge XP updates
+      qc.invalidateQueries({ queryKey: queryKeys.achievements })
+      qc.invalidateQueries({ queryKey: queryKeys.challenges() })
+      qc.invalidateQueries({ queryKey: queryKeys.myChallenges })
       toast.success(`+${data.xpReward} XP earned! Quest complete 🎉`)
       confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, colors: ['#7c3aed','#06b6d4','#22c55e'] })
     },

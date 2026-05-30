@@ -46,6 +46,19 @@ public interface ChallengeParticipantRepository
                           @Param("userId")      UUID userId);
 
     /**
+     * Return just the {@code currentXp} for one participant — used when building
+     * the {@code myCurrentXp} field in {@code ChallengeResponse} without loading
+     * the full entity.
+     */
+    @Query("""
+        SELECT cp.currentXp FROM ChallengeParticipant cp
+        WHERE  cp.id.challengeId = :challengeId
+        AND    cp.id.userId      = :userId
+        """)
+    java.util.Optional<Integer> findCurrentXp(@Param("challengeId") UUID challengeId,
+                                               @Param("userId")      UUID userId);
+
+    /**
      * Atomically increment a participant's XP by {@code xpAmount}.
      * Called from the Kafka XP-event consumer so we avoid a read-modify-write
      * race condition.

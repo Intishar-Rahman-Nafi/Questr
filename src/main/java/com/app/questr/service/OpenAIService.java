@@ -67,6 +67,10 @@ public class OpenAIService {
     private static final Duration REPORT_TTL         = Duration.ofHours(24);
     private static final Duration REGEN_RL_TTL       = Duration.ofHours(24);
 
+    /** Maximum number of forced regenerations a user may perform per day. */
+    @Value("${openai.regen-daily-limit:3}")
+    private int regenDailyLimit;
+
     // ── Static fallback content ───────────────────────────────────────────────
     private static final String FALLBACK_SUMMARY =
             "You had a productive week! Keep building those positive habits and " +
@@ -126,19 +130,21 @@ public class OpenAIService {
 
     /**
      * Force-regenerate the report, bypassing the 24 h cache.
-     * Rate-limited: at most one forced regeneration per user per day.
+     * Rate-limited: at most {@code openai.regen-daily-limit} (default 3) regenerations
+     * per user per calendar day.
      *
-     * @throws ApiException (429) if the user has already regenerated today.
+     * @throws ApiException (429) if the daily limit has been reached.
      */
     public AIReportResponse regenerateWeeklyReport(UUID userId) {
         String rlKey = buildRateLimitKey(userId);
 
         // Check rate limit (Redis + in-memory fallback)
-        if (isRateLimited(rlKey)) {
-            log.warn("Regeneration rate limit hit for user {}", userId);
+        int used = getRegenCount(rlKey);
+        if (used >= regenDailyLimit) {
+            log.warn("Regeneration rate limit hit for user {} ({}/{})", userId, used, regenDailyLimit);
             throw new ApiException(
-                    "You have already regenerated your weekly report today. " +
-                    "Try again tomorrow.",
+                    "You have reached the daily regeneration limit (" + regenDailyLimit +
+                    " per day). Try again tomorrow.",
                     HttpStatus.TOO_MANY_REQUESTS);
         }
 
@@ -149,8 +155,8 @@ public class OpenAIService {
         String cacheKey = buildCacheKey(userId);
         writeToCache(cacheKey, report, REPORT_TTL);
 
-        // Record rate-limit token (Redis + in-memory)
-        setRateLimitToken(rlKey);
+        // Increment rate-limit counter (Redis + in-memory)
+        incrementRegenCount(rlKey);
 
         return report;
     }
@@ -351,28 +357,46 @@ public class OpenAIService {
     }
 
     // =========================================================================
-    // Rate limiting (Redis primary + in-memory fallback)
+    // Rate limiting (Redis primary + in-memory fallback counter)
     // =========================================================================
 
-    private boolean isRateLimited(String rlKey) {
+    /**
+     * Returns how many regenerations the user has already performed today.
+     * Redis is the source of truth; in-memory map is used as fallback.
+     */
+    private int getRegenCount(String rlKey) {
         // Redis check
         try {
-            if (Boolean.TRUE.equals(redisTemplate.hasKey(rlKey))) return true;
+            Object raw = redisTemplate.opsForValue().get(rlKey);
+            if (raw != null) {
+                return Integer.parseInt(raw.toString());
+            }
         } catch (Exception e) {
-            log.warn("Redis rate-limit check failed, falling back to in-memory: {}", e.getMessage());
+            log.warn("Redis rate-limit read failed, falling back to in-memory: {}", e.getMessage());
         }
 
-        // In-memory fallback
+        // In-memory fallback: count how many times this key was used today
         LocalDateTime lastRegen = localRateLimitCache.get(rlKey);
-        return lastRegen != null && LocalDateTime.now().isBefore(lastRegen.plus(REGEN_RL_TTL));
+        if (lastRegen == null) return 0;
+        // In-memory only tracks binary state (used today vs not) as a safety net.
+        // Return regenDailyLimit so it blocks when Redis is down and key is set.
+        return lastRegen.toLocalDate().equals(LocalDate.now()) ? regenDailyLimit : 0;
     }
 
-    private void setRateLimitToken(String rlKey) {
+    /**
+     * Increments the regeneration counter for today. Creates the key with a
+     * 24-hour TTL on first use so it expires automatically at midnight + 24 h.
+     */
+    private void incrementRegenCount(String rlKey) {
         // Redis (distributed)
         try {
-            redisTemplate.opsForValue().set(rlKey, "1", REGEN_RL_TTL);
+            Long newVal = redisTemplate.opsForValue().increment(rlKey);
+            if (newVal != null && newVal == 1) {
+                // First increment — set expiry to end of current day
+                redisTemplate.expire(rlKey, REGEN_RL_TTL);
+            }
         } catch (Exception e) {
-            log.warn("Redis rate-limit set failed (falling back to in-memory): {}", e.getMessage());
+            log.warn("Redis rate-limit increment failed (falling back to in-memory): {}", e.getMessage());
         }
         // In-memory (guaranteed)
         localRateLimitCache.put(rlKey, LocalDateTime.now());
