@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Link } from 'react-router-dom'
-import { Plus, Users, Zap, Calendar, ArrowRight, X, Trophy } from 'lucide-react'
+import { Plus, Users, Zap, Calendar, ArrowRight, X, Trophy, Copy, Check, LogIn } from 'lucide-react'
 import { toast } from 'sonner'
 import { challengesApi } from '@/api'
 import { queryKeys } from '@/lib/queryKeys'
@@ -13,7 +13,6 @@ import { formatDate } from '@/lib/formatDate'
 import { cn } from '@/lib/cn'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Spinner } from '@/components/ui/Spinner'
-import { useAuthStore } from '@/store/authStore'
 import type { Challenge, ChallengeStatus } from '@/shared/types/api.types'
 
 const STATUS_STYLES: Record<ChallengeStatus, string> = {
@@ -23,13 +22,14 @@ const STATUS_STYLES: Record<ChallengeStatus, string> = {
   CANCELLED: 'bg-red-500/15 text-red-400',
 }
 
-function ChallengeCard({ challenge, onJoin, isJoining, myUserId }: {
+function ChallengeCard({ challenge, onJoin, isJoining }: {
   challenge: Challenge
-  onJoin:    (inviteCode: string, id: string) => void
+  onJoin:    () => void
   isJoining: boolean
-  myUserId:  string | null
 }) {
-  const joined    = (challenge.participants ?? []).some(p => p.userId === myUserId)
+  // joined is set by the backend (explicit boolean) or derived from creator flag
+  const joined    = challenge.joined ?? challenge.creator ?? false
+  const isCreator = challenge.creator ?? false
   const progress  = Math.min(100, Math.round(((challenge.myCurrentXp ?? 0) / challenge.targetXp) * 100))
   const daysLeft  = Math.max(0, Math.ceil((new Date(challenge.endDate).getTime() - Date.now()) / 86_400_000))
 
@@ -46,7 +46,10 @@ function ChallengeCard({ challenge, onJoin, isJoining, myUserId }: {
             <span className={cn('text-[11px] font-medium px-2 py-0.5 rounded-full', STATUS_STYLES[challenge.status])}>
               {challenge.status}
             </span>
-            {joined && (
+            {isCreator && (
+              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400">Creator</span>
+            )}
+            {joined && !isCreator && (
               <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-brand-500/15 text-brand-400">Joined</span>
             )}
           </div>
@@ -91,14 +94,123 @@ function ChallengeCard({ challenge, onJoin, isJoining, myUserId }: {
           View details <ArrowRight className="w-3 h-3" />
         </Link>
         <div className="flex-1" />
-        {!joined && challenge.status === 'ACTIVE' && (
-          <button onClick={() => onJoin(challenge.inviteCode, challenge.id)} disabled={isJoining}
+        {/* Only show Join button for non-joined, non-creator active challenges */}
+        {!joined && !isCreator && challenge.status === 'ACTIVE' && (
+          <button onClick={onJoin} disabled={isJoining}
             className="btn-brand text-xs py-1.5 px-3">
             {isJoining ? <Spinner size="sm" /> : <><Trophy className="w-3 h-3" />Join</>}
           </button>
         )}
       </div>
     </motion.div>
+  )
+}
+
+// ── Invite Code Display Modal ──────────────────────────────────────────────
+function InviteCodeModal({ code, title, onClose }: { code: string; title: string; onClose: () => void }) {
+  const [copied, setCopied] = useState(false)
+  const copy = () => {
+    navigator.clipboard.writeText(code).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+  return (
+    <AnimatePresence>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.94, y: 16 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.94, y: 16 }}
+          transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+          className="w-full max-w-sm pointer-events-auto"
+        >
+          <div className="card p-6 text-center space-y-5">
+            <div className="text-4xl">⚔️</div>
+            <div>
+              <h2 className="text-lg font-semibold text-white mb-1">Challenge Created!</h2>
+              <p className="text-slate-400 text-sm">Share this invite code with others so they can join <span className="text-white font-medium">"{title}"</span></p>
+            </div>
+            <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+              <p className="text-xs text-slate-500 mb-2">Invite Code</p>
+              <div className="flex items-center justify-center gap-3">
+                <span className="text-3xl font-mono font-bold tracking-[0.25em] text-brand-400">{code}</span>
+                <button onClick={copy}
+                  className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all">
+                  {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+                </button>
+              </div>
+              <p className="text-xs text-slate-600 mt-2">Others enter this code to join your challenge</p>
+            </div>
+            <button onClick={onClose} className="btn-brand w-full justify-center">Got it!</button>
+          </div>
+        </motion.div>
+      </div>
+    </AnimatePresence>
+  )
+}
+
+// ── Join by Invite Code Modal ─────────────────────────────────────────────
+function JoinModal({ open, onClose, onJoin, isJoining }: {
+  open: boolean; onClose: () => void; onJoin: (code: string) => void; isJoining: boolean
+}) {
+  const [code, setCode] = useState('')
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault()
+    const trimmed = code.trim().toUpperCase()
+    if (trimmed.length !== 6) { toast.error('Invite code must be 6 characters'); return }
+    onJoin(trimmed)
+  }
+  return (
+    <AnimatePresence>
+      {open && (
+        <>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.94, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.94, y: 16 }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              className="w-full max-w-sm pointer-events-auto"
+            >
+              <div className="card p-6">
+                <div className="flex items-center justify-between mb-5">
+                  <h2 className="text-lg font-semibold text-white">Join a Challenge</h2>
+                  <button onClick={onClose} className="text-slate-500 hover:text-white transition-colors"><X className="w-5 h-5" /></button>
+                </div>
+                <form onSubmit={submit} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-slate-400">Invite Code</label>
+                    <input
+                      value={code}
+                      onChange={e => setCode(e.target.value.toUpperCase())}
+                      className="input-field text-center text-xl font-mono tracking-widest uppercase"
+                      placeholder="ABC123"
+                      maxLength={6}
+                      autoFocus
+                    />
+                    <p className="text-xs text-slate-600">Ask the challenge creator for their 6-character invite code</p>
+                  </div>
+                  <div className="flex gap-3 pt-1">
+                    <button type="button" onClick={onClose}
+                      className="flex-1 py-2.5 rounded-xl text-sm font-medium text-slate-400 bg-white/5 hover:bg-white/8 transition-all">
+                      Cancel
+                    </button>
+                    <button type="submit" disabled={isJoining || code.trim().length !== 6} className="btn-brand flex-1 justify-center py-2.5">
+                      {isJoining ? <Spinner size="sm" /> : <><LogIn className="w-4 h-4" />Join</>}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </motion.div>
+          </div>
+        </>
+      )}
+    </AnimatePresence>
   )
 }
 
@@ -120,7 +232,7 @@ function CreateModal({ open, onClose, onCreate }: {
     defaultValues: { targetXp: 500 },
   })
 
-  const submit = async (d: CForm) => { await onCreate(d); reset(); onClose() }
+  const submit = async (d: CForm) => { await onCreate(d); reset() }
 
   return (
     <AnimatePresence>
@@ -195,10 +307,12 @@ function CreateModal({ open, onClose, onCreate }: {
 
 export function ChallengesPage() {
   const qc = useQueryClient()
-  const [modal, setModal]   = useState(false)
-  const [tab,   setTab]     = useState<'all' | 'my'>('all')
-  const [joiningId, setJoiningId] = useState<string | null>(null)
-  const userId = useAuthStore(s => s.userId)
+  const [createModal, setCreateModal] = useState(false)
+  const [joinModal,   setJoinModal]   = useState(false)
+  const [tab,         setTab]         = useState<'all' | 'my'>('all')
+  const [joiningId,   setJoiningId]   = useState<string | null>(null)
+  // After creation: show invite code modal
+  const [newChallenge, setNewChallenge] = useState<{ code: string; title: string } | null>(null)
 
   const { data: rawAll, isLoading: allLoading } = useQuery({ queryKey: queryKeys.challenges(), queryFn: challengesApi.list })
   const { data: rawMy,  isLoading: myLoading  } = useQuery({ queryKey: queryKeys.myChallenges,  queryFn: challengesApi.my })
@@ -207,11 +321,14 @@ export function ChallengesPage() {
 
   const createMut = useMutation({
     mutationFn: challengesApi.create,
-    onSuccess: () => {
+    onSuccess: (created) => {
       qc.invalidateQueries({ queryKey: queryKeys.challenges() })
       qc.invalidateQueries({ queryKey: queryKeys.myChallenges })
-      toast.success('Challenge created! ⚔️')
+      setCreateModal(false)
+      // Show the invite code to the creator
+      setNewChallenge({ code: created.inviteCode, title: created.title })
     },
+    onError: () => toast.error('Failed to create challenge'),
   })
 
   const joinMut = useMutation({
@@ -220,11 +337,18 @@ export function ChallengesPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.challenges() })
       qc.invalidateQueries({ queryKey: queryKeys.myChallenges })
+      setJoinModal(false)
       toast.success('Joined the challenge! 🏆')
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message ?? 'Invalid invite code or already joined'
+      toast.error(msg)
     },
   })
 
-  const handleJoin = (inviteCode: string, id: string) => { setJoiningId(id); joinMut.mutate(inviteCode) }
+  const handleJoinByCode = (code: string) => {
+    joinMut.mutate(code)
+  }
 
   const challenges = tab === 'my' ? my : all
   const isLoading  = tab === 'my' ? myLoading : allLoading
@@ -238,9 +362,16 @@ export function ChallengesPage() {
           <h1 className="text-2xl font-bold text-white">Challenges</h1>
           <p className="text-slate-500 text-sm mt-0.5">Compete with others, climb the leaderboard</p>
         </div>
-        <button onClick={() => setModal(true)} className="btn-brand">
-          <Plus className="w-4 h-4" /><span className="hidden sm:inline">Create</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Join by invite code */}
+          <button onClick={() => setJoinModal(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-slate-300 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 transition-all">
+            <LogIn className="w-4 h-4" /><span className="hidden sm:inline">Join</span>
+          </button>
+          <button onClick={() => setCreateModal(true)} className="btn-brand">
+            <Plus className="w-4 h-4" /><span className="hidden sm:inline">Create</span>
+          </button>
+        </div>
       </motion.div>
 
       {/* Tabs */}
@@ -263,21 +394,41 @@ export function ChallengesPage() {
         <EmptyState
           icon="⚔️"
           title={tab === 'my' ? "You haven't joined any challenges" : "No challenges yet"}
-          body={tab === 'my' ? 'Browse challenges and join one!' : 'Be the first to create a challenge!'}
-          action={<button onClick={() => setModal(true)} className="btn-brand"><Plus className="w-4 h-4" />Create challenge</button>}
+          body={tab === 'my'
+            ? 'Browse challenges and join one!'
+            : 'Be the first to create a challenge!'}
+          action={
+            tab === 'my'
+              ? <button onClick={() => setJoinModal(true)} className="btn-brand"><LogIn className="w-4 h-4" />Join with code</button>
+              : <button onClick={() => setCreateModal(true)} className="btn-brand"><Plus className="w-4 h-4" />Create challenge</button>
+          }
         />
       ) : (
         <motion.div layout className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <AnimatePresence>
             {challenges.map(c => (
-              <ChallengeCard key={c.id} challenge={c} myUserId={userId}
-                onJoin={handleJoin} isJoining={joiningId === c.id} />
+              <ChallengeCard key={c.id} challenge={c}
+                onJoin={() => { setJoiningId(c.id); joinMut.mutate(c.inviteCode) }}
+                isJoining={joiningId === c.id} />
             ))}
           </AnimatePresence>
         </motion.div>
       )}
 
-      <CreateModal open={modal} onClose={() => setModal(false)} onCreate={async d => { await createMut.mutateAsync(d) }} />
+      <CreateModal open={createModal} onClose={() => setCreateModal(false)}
+        onCreate={async d => { await createMut.mutateAsync(d) }} />
+
+      <JoinModal open={joinModal} onClose={() => setJoinModal(false)}
+        onJoin={handleJoinByCode} isJoining={joinMut.isPending} />
+
+      {/* Invite code display after challenge creation */}
+      {newChallenge && (
+        <InviteCodeModal
+          code={newChallenge.code}
+          title={newChallenge.title}
+          onClose={() => setNewChallenge(null)}
+        />
+      )}
     </div>
   )
 }

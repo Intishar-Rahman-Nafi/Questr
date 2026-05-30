@@ -267,14 +267,18 @@ public class ChallengeService {
     }
 
     private ChallengeResponse toResponse(Challenge c, UUID requestingUserId) {
-        LocalDateTime now    = LocalDateTime.now();
-        boolean       active = c.getStartDate().isBefore(now) && c.getEndDate().isAfter(now);
+        LocalDateTime now      = LocalDateTime.now();
+        boolean       active   = c.getStartDate().isBefore(now) && c.getEndDate().isAfter(now);
         boolean       isCreator = c.getCreatedBy().getId().equals(requestingUserId);
 
         // Use a count query instead of c.getParticipants().size() to avoid the
         // Hibernate L1-cache issue where the in-memory participants collection
         // may be stale after a separate participantRepository.save() call.
         int participantCount = (int) participantRepository.countByIdChallengeId(c.getId());
+
+        // The creator is always a participant; for others, look up the DB
+        boolean joined = isCreator ||
+                participantRepository.existsByIdChallengeIdAndIdUserId(c.getId(), requestingUserId);
 
         return new ChallengeResponse(
                 c.getId(),
@@ -289,7 +293,8 @@ public class ChallengeService {
                 c.getCreatedAt(),
                 participantCount,
                 active,
-                isCreator);
+                isCreator,
+                joined);
     }
 
     /**

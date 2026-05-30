@@ -126,6 +126,7 @@ export interface Challenge {
   myCurrentXp?:     number
   myRank?:          number
   joined?:          boolean
+  creator?:         boolean   // true when the current user created this challenge
 }
 
 export interface CreateChallengeRequest {

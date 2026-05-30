@@ -25,6 +25,8 @@ public record ChallengeResponse(
         LocalDateTime   createdAt,
         int             participantCount,
         boolean         active,
-        boolean         creator
+        boolean         creator,
+        /** true when the requesting user is currently a participant (including creator) */
+        boolean         joined
 ) {}
 

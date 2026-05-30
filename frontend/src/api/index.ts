@@ -124,13 +124,13 @@ export const dashboardApi = {
     api.get<WeeklyHistory[]>('/dashboard/history', { params: { weeks } }).then(r => r.data),
 }
 
-// ── Challenge field adapter ────────────────────────────────────────────────
+// ── Challenge field adapter ─────────────��──────────────────────────────────
 // Backend ChallengeResponse: { id, name, description, inviteCode, startDate,
 //   endDate, targetXp, createdById, createdByUsername, createdAt,
-//   participantCount, active, creator }
+//   participantCount, active, creator, joined }
 // Frontend Challenge: { id, title, description, inviteCode, startDate,
 //   endDate, targetXp, creatorId, creatorUsername, status,
-//   participantCount, participants, myCurrentXp, myRank, joined }
+//   participantCount, participants, myCurrentXp, myRank, joined, creator }
 function adaptChallenge(raw: any, leaderboardEntries?: any[]): Challenge {
   const now   = Date.now()
   const start = new Date(raw.startDate).getTime()
@@ -155,6 +155,10 @@ function adaptChallenge(raw: any, leaderboardEntries?: any[]): Challenge {
     joinedAt:  e.joinedAt,
   }))
 
+  // joined: backend now returns an explicit `joined` boolean.
+  // Fallback: creator is always joined.
+  const joined = raw.joined ?? raw.creator ?? false
+
   return {
     id:               raw.id,
     title:            raw.title ?? raw.name ?? '',
@@ -170,7 +174,8 @@ function adaptChallenge(raw: any, leaderboardEntries?: any[]): Challenge {
     inviteCode:       raw.inviteCode ?? '',
     myCurrentXp:      raw.myCurrentXp,
     myRank:           raw.myRank,
-    joined:           raw.joined,
+    joined,
+    creator:          raw.creator ?? false,
   }
 }
 
@@ -220,6 +225,8 @@ export const challengesApi = {
     api.post<any>('/challenges/join', { inviteCode }).then(r => adaptChallenge(r.data)),
 
   leave: (id: string) => api.post(`/challenges/${id}/leave`),
+
+  delete: (id: string) => api.delete(`/challenges/${id}`),
 }
 
 // ── AI Report ──────────────────────────────────────────────────────────────
