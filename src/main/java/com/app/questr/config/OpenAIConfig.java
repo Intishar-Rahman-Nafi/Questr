@@ -44,7 +44,7 @@ public class OpenAIConfig {
     private int timeoutSeconds;
 
     @Bean("openAiWebClient")
-    public WebClient openAiWebClient() {
+     public WebClient openAiWebClient() {
         HttpClient httpClient = HttpClient.create()
                 .responseTimeout(Duration.ofSeconds(timeoutSeconds))
                 .doOnConnected(conn -> conn
