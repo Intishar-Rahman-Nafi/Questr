@@ -35,6 +35,16 @@ public interface ChallengeParticipantRepository
     /** Total number of participants in a challenge — used in response DTOs. */
     long countByIdChallengeId(UUID challengeId);
 
+    /** Remove a single participant from a challenge (used by leave endpoint). */
+    @Modifying
+    @Query("""
+        DELETE FROM ChallengeParticipant cp
+        WHERE  cp.id.challengeId = :challengeId
+        AND    cp.id.userId      = :userId
+        """)
+    int deleteParticipant(@Param("challengeId") UUID challengeId,
+                          @Param("userId")      UUID userId);
+
     /**
      * Atomically increment a participant's XP by {@code xpAmount}.
      * Called from the Kafka XP-event consumer so we avoid a read-modify-write

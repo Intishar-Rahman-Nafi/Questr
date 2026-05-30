@@ -122,6 +122,7 @@ export interface Challenge {
   status:           ChallengeStatus
   participantCount: number
   participants:     ChallengeParticipant[]
+  inviteCode:       string
   myCurrentXp?:     number
   myRank?:          number
   joined?:          boolean

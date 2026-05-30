@@ -151,6 +151,20 @@ public class ChallengeService {
                 .collect(Collectors.toList());
     }
 
+    // ── Get single ───────────────────────────────────────────────────────────
+
+    /**
+     * Return the full challenge DTO for any authenticated user.
+     *
+     * @throws ResourceNotFoundException 404 if the challenge does not exist
+     */
+    @Transactional(readOnly = true)
+    public ChallengeResponse getChallenge(UUID challengeId, UUID requestingUserId) {
+        Challenge challenge = challengeRepository.findById(challengeId)
+                .orElseThrow(() -> new ResourceNotFoundException("Challenge", challengeId));
+        return toResponse(challenge, requestingUserId);
+    }
+
     // ── Leaderboard ──────────────────────────────────────────────────────────
 
     /**
@@ -189,6 +203,34 @@ public class ChallengeService {
                 challenge.getName(),
                 challenge.getTargetXp(),
                 entries);
+    }
+
+    // ── Leave ─────────────────────────────────────────────────────────────────
+
+    /**
+     * Leave a challenge.
+     *
+     * <p>The creator may not leave their own challenge (they must delete it instead).
+     *
+     * @throws ResourceNotFoundException 404 if the challenge does not exist
+     * @throws ApiException              403 if the user is the creator
+     * @throws ApiException              409 if the user is not a participant
+     */
+    public void leaveChallenge(UUID challengeId, UUID userId) {
+        Challenge challenge = challengeRepository.findById(challengeId)
+                .orElseThrow(() -> new ResourceNotFoundException("Challenge", challengeId));
+
+        if (challenge.getCreatedBy().getId().equals(userId)) {
+            throw new ApiException(
+                    "The creator cannot leave their own challenge. Delete it instead.", HttpStatus.FORBIDDEN);
+        }
+
+        int deleted = participantRepository.deleteParticipant(challengeId, userId);
+        if (deleted == 0) {
+            throw new ApiException("You are not a participant in this challenge", HttpStatus.CONFLICT);
+        }
+
+        log.info("User {} left challenge '{}'", userId, challenge.getName());
     }
 
     // ── Delete ────────────────────────────────────────────────────────────────

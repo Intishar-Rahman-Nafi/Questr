@@ -25,7 +25,7 @@ const STATUS_STYLES: Record<ChallengeStatus, string> = {
 
 function ChallengeCard({ challenge, onJoin, isJoining, myUserId }: {
   challenge: Challenge
-  onJoin:    (id: string) => void
+  onJoin:    (inviteCode: string, id: string) => void
   isJoining: boolean
   myUserId:  string | null
 }) {
@@ -92,7 +92,7 @@ function ChallengeCard({ challenge, onJoin, isJoining, myUserId }: {
         </Link>
         <div className="flex-1" />
         {!joined && challenge.status === 'ACTIVE' && (
-          <button onClick={() => onJoin(challenge.id)} disabled={isJoining}
+          <button onClick={() => onJoin(challenge.inviteCode, challenge.id)} disabled={isJoining}
             className="btn-brand text-xs py-1.5 px-3">
             {isJoining ? <Spinner size="sm" /> : <><Trophy className="w-3 h-3" />Join</>}
           </button>
@@ -215,7 +215,7 @@ export function ChallengesPage() {
   })
 
   const joinMut = useMutation({
-    mutationFn: (id: string) => challengesApi.join(id),
+    mutationFn: (inviteCode: string) => challengesApi.join(inviteCode),
     onSettled: () => setJoiningId(null),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.challenges() })
@@ -224,7 +224,7 @@ export function ChallengesPage() {
     },
   })
 
-  const handleJoin = (id: string) => { setJoiningId(id); joinMut.mutate(id) }
+  const handleJoin = (inviteCode: string, id: string) => { setJoiningId(id); joinMut.mutate(inviteCode) }
 
   const challenges = tab === 'my' ? my : all
   const isLoading  = tab === 'my' ? myLoading : allLoading

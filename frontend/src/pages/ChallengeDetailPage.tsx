@@ -91,7 +91,7 @@ export function ChallengeDetailPage() {
   })
 
   const joinMut = useMutation({
-    mutationFn: () => challengesApi.join(id!),
+    mutationFn: (inviteCode: string) => challengesApi.join(inviteCode),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.challenge(id!) })
       qc.invalidateQueries({ queryKey: queryKeys.challenges() })
@@ -162,7 +162,7 @@ export function ChallengeDetailPage() {
                 {leaveMut.isPending ? <Spinner size="sm" /> : <LogOut className="w-4 h-4" />}Leave
               </button>
             ) : (
-              <button onClick={() => joinMut.mutate()} disabled={joinMut.isPending} className="btn-brand">
+              <button onClick={() => joinMut.mutate(challenge.inviteCode)} disabled={joinMut.isPending} className="btn-brand">
                 {joinMut.isPending ? <Spinner size="sm" /> : <UserPlus className="w-4 h-4" />}Join Challenge
               </button>
             )

@@ -3,7 +3,7 @@ import type {
   AuthResponse, LoginRequest, SignupRequest,
   Task, CreateTaskRequest, UpdateTaskRequest,
   Badge, DashboardResponse, WeeklyHistory,
-  Challenge, CreateChallengeRequest,
+  Challenge, ChallengeStatus, CreateChallengeRequest,
   AIReportResponse,
 } from '@/shared/types/api.types'
 
@@ -124,19 +124,102 @@ export const dashboardApi = {
     api.get<WeeklyHistory[]>('/dashboard/history', { params: { weeks } }).then(r => r.data),
 }
 
+// ── Challenge field adapter ────────────────────────────────────────────────
+// Backend ChallengeResponse: { id, name, description, inviteCode, startDate,
+//   endDate, targetXp, createdById, createdByUsername, createdAt,
+//   participantCount, active, creator }
+// Frontend Challenge: { id, title, description, inviteCode, startDate,
+//   endDate, targetXp, creatorId, creatorUsername, status,
+//   participantCount, participants, myCurrentXp, myRank, joined }
+function adaptChallenge(raw: any, leaderboardEntries?: any[]): Challenge {
+  const now   = Date.now()
+  const start = new Date(raw.startDate).getTime()
+  const end   = new Date(raw.endDate).getTime()
+
+  let status: Challenge['status']
+  if (raw.status) {
+    status = raw.status
+  } else if (raw.active === true || (start <= now && end > now)) {
+    status = 'ACTIVE'
+  } else if (start > now) {
+    status = 'UPCOMING'
+  } else {
+    status = 'COMPLETED'
+  }
+
+  const participants: Challenge['participants'] = (leaderboardEntries ?? []).map((e: any) => ({
+    userId:    e.userId,
+    username:  e.username,
+    currentXp: e.currentXp,
+    rank:      e.rank,
+    joinedAt:  e.joinedAt,
+  }))
+
+  return {
+    id:               raw.id,
+    title:            raw.title ?? raw.name ?? '',
+    description:      raw.description ?? '',
+    targetXp:         raw.targetXp ?? 0,
+    startDate:        raw.startDate,
+    endDate:          raw.endDate,
+    creatorId:        raw.creatorId ?? raw.createdById ?? '',
+    creatorUsername:  raw.creatorUsername ?? raw.createdByUsername ?? '',
+    status,
+    participantCount: raw.participantCount ?? 0,
+    participants,
+    inviteCode:       raw.inviteCode ?? '',
+    myCurrentXp:      raw.myCurrentXp,
+    myRank:           raw.myRank,
+    joined:           raw.joined,
+  }
+}
+
+// Maps frontend CreateChallengeRequest (uses 'title') → backend (uses 'name')
+function toBackendChallenge(data: CreateChallengeRequest) {
+  return {
+    name:        data.title,
+    description: data.description ?? null,
+    targetXp:    data.targetXp,
+    startDate:   data.startDate ? `${data.startDate}T00:00:00` : null,
+    endDate:     data.endDate   ? `${data.endDate}T23:59:59`   : null,
+  }
+}
+
 // ── Challenges ─────────────────────────────────────────────────────────────
 export const challengesApi = {
   // Backend: GET /challenges?filter=all  → all user challenges
-  list:   () => api.get<Challenge[]>('/challenges', { params: { filter: 'all' } }).then(r => r.data),
-  // Backend: GET /challenges?filter=active  → active user challenges (default)
-  my:     () => api.get<Challenge[]>('/challenges', { params: { filter: 'active' } }).then(r => r.data),
-  // Backend: GET /challenges/{id}/leaderboard → includes challenge info
-  get:    (id: string) => api.get<Challenge>(`/challenges/${id}/leaderboard`).then(r => r.data?.challenge ?? r.data),
+  list: () =>
+    api.get<any[]>('/challenges', { params: { filter: 'all' } })
+      .then(r => (Array.isArray(r.data) ? r.data : []).map(c => adaptChallenge(c))),
+
+  // Backend: GET /challenges?filter=active  → active user challenges
+  my: () =>
+    api.get<any[]>('/challenges', { params: { filter: 'active' } })
+      .then(r => (Array.isArray(r.data) ? r.data : []).map(c => adaptChallenge(c))),
+
+  // Backend: GET /challenges/{id} (basic info) + GET /challenges/{id}/leaderboard (participants)
+  get: async (id: string): Promise<Challenge> => {
+    const [challengeRes, leaderboardRes] = await Promise.allSettled([
+      api.get<any>(`/challenges/${id}`).then(r => r.data),
+      api.get<any>(`/challenges/${id}/leaderboard`).then(r => r.data),
+    ])
+    if (challengeRes.status === 'rejected') {
+      throw new Error('Challenge not found')
+    }
+    const c   = challengeRes.value
+    const lb  = leaderboardRes.status === 'fulfilled' ? leaderboardRes.value : null
+    return adaptChallenge(c, lb?.entries ?? [])
+  },
+
+  // Backend: POST /challenges  { name, description, targetXp, startDate, endDate }
   create: (data: CreateChallengeRequest) =>
-    api.post<Challenge>('/challenges', data).then(r => r.data),
-  // Backend: POST /challenges/join  { inviteCode }
-  join:   (id: string) => api.post<Challenge>('/challenges/join', { inviteCode: id }).then(r => r.data),
-  leave:  (id: string) => api.post(`/challenges/${id}/leave`),
+    api.post<any>('/challenges', toBackendChallenge(data)).then(r => adaptChallenge(r.data)),
+
+  // Backend: POST /challenges/join  { inviteCode }  (inviteCode = 6-char code, NOT uuid)
+  join: (inviteCode: string) =>
+    api.post<any>('/challenges/join', { inviteCode }).then(r => adaptChallenge(r.data)),
+
+  leave: (id: string) => api.post(`/challenges/${id}/leave`),
 }
 
 // ── AI Report ──────────────────────────────────────────────────────────────

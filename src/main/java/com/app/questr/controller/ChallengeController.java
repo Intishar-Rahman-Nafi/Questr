@@ -26,6 +26,7 @@ import java.util.UUID;
  * POST   /api/v1/challenges               — create a new challenge (creator auto-joins)
  * POST   /api/v1/challenges/join          — join an existing challenge by invite code
  * GET    /api/v1/challenges               — list user's challenges (?filter=all|active)
+ * GET    /api/v1/challenges/{id}          — get single challenge by id
  * GET    /api/v1/challenges/{id}/leaderboard — challenge leaderboard (participants only)
  * DELETE /api/v1/challenges/{id}          — delete a challenge (creator only)
  * </pre>
@@ -92,6 +93,23 @@ public class ChallengeController {
         return ResponseEntity.ok(challenges);
     }
 
+    // ── Get single ────────────────────────────────────────────────────────────
+
+    /**
+     * GET /api/v1/challenges/{id}
+     *
+     * <p>Returns the full challenge DTO for any authenticated user.
+     * Used by the detail page to load challenge info before joining.
+     */
+    @GetMapping("/{id}")
+    public ResponseEntity<ChallengeResponse> getChallenge(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID id) {
+
+        return ResponseEntity.ok(
+                challengeService.getChallenge(id, principal.getId()));
+    }
+
     // ── Leaderboard ───────────────────────────────────────────────────────────
 
     /**
@@ -107,6 +125,23 @@ public class ChallengeController {
 
         return ResponseEntity.ok(
                 challengeService.getChallengeLeaderboard(id, principal.getId()));
+    }
+
+    // ── Leave ─────────────────────────────────────────────────────────────────
+
+    /**
+     * POST /api/v1/challenges/{id}/leave
+     *
+     * <p>Removes the authenticated user from the challenge's participant list.
+     * The creator cannot leave (they must delete the challenge instead).
+     */
+    @PostMapping("/{id}/leave")
+    public ResponseEntity<Void> leaveChallenge(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID id) {
+
+        challengeService.leaveChallenge(id, principal.getId());
+        return ResponseEntity.noContent().build();
     }
 
     // ── Delete ────────────────────────────────────────────────────────────────
