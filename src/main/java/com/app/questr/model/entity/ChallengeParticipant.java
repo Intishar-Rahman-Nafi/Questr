@@ -1,5 +1,6 @@
 package com.app.questr.model.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -38,11 +39,15 @@ public class ChallengeParticipant {
     @ManyToOne(fetch = FetchType.LAZY)
     @MapsId("challengeId")
     @JoinColumn(name = "challenge_id", nullable = false)
+    // Breaks the Challenge.participants <-> ChallengeParticipant.challenge cycle.
+    @JsonIgnore
     private Challenge challenge;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @MapsId("userId")
     @JoinColumn(name = "user_id", nullable = false)
+    // Breaks any User <-> ChallengeParticipant cycle for Jackson.
+    @JsonIgnore
     private User user;
 
     @Column(name = "current_xp", nullable = false)

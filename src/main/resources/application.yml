@@ -4,7 +4,7 @@ spring:
 
   # ── Database ─────────────────────────────────────────────────────────────────
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5433}/${DB_NAME:questr_db}
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:questr_db}
     username: ${DB_USER:admin}
     password: ${DB_PASSWORD:secret}
     driver-class-name: org.postgresql.Driver
@@ -19,7 +19,7 @@ spring:
   # ── JPA / Hibernate ───────────────────────────────────────────────────────────
   jpa:
     hibernate:
-      ddl-auto: none           # FlywayConfig owns the schema; Hibernate only uses it
+      ddl-auto: validate          # Flyway owns the schema; Hibernate only validates
     show-sql: false
     open-in-view: false           # Prevent lazy-load issues in controllers
     properties:
@@ -41,9 +41,7 @@ spring:
   # ── Redis ─────────────────────────────────────────────────────────────────────
   data:
     redis:
-      # Use 127.0.0.1 (not localhost) — Netty's async DNS resolver cannot resolve
-      # the 'localhost' hostname on macOS without the native resolver library.
-      host: ${REDIS_HOST:127.0.0.1}
+      host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
       timeout: 2000ms
@@ -75,13 +73,8 @@ spring:
       auto-offset-reset: earliest
       enable-auto-commit: false   # Manual offset commit for reliability
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      # ErrorHandlingDeserializer wraps JsonDeserializer so a single bad message
-      # (poison pill) is skipped instead of crashing the whole consumer loop.
-      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
-        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
-        # Required because the producer sets add.type.headers=false (no __TypeId__ header).
-        spring.json.value.default.type: com.app.questr.event.XPUpdateEvent
         spring.json.trusted.packages: "com.app.questr.*"
     listener:
       ack-mode: MANUAL_IMMEDIATE  # Pair with enable-auto-commit: false
@@ -162,4 +155,3 @@ logging:
     com.app.questr: INFO
     org.springframework.security: WARN
     org.hibernate.SQL: WARN
-

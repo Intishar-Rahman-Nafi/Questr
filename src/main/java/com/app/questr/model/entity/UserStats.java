@@ -1,5 +1,6 @@
 package com.app.questr.model.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -38,6 +39,13 @@ public class UserStats {
 
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false, unique = true)
+    // Breaks the User<->UserStats bidirectional cycle for Jackson (e.g. when
+    // GamificationService caches a raw UserStats entity in Redis). Without
+    // this, serialization recurses forever: UserStats.user -> User.stats ->
+    // UserStats.user -> ... (StreamWriteConstraints eventually throws
+    // "Document nesting depth exceeds the maximum allowed"). JPA/Hibernate
+    // behavior is completely unaffected — @JsonIgnore is Jackson-only.
+    @JsonIgnore
     private User user;
 
     @Column(name = "total_xp", nullable = false)

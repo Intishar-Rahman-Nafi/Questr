@@ -29,8 +29,10 @@ docker-compose*.yml
 *.env
 !.env.example
 
-# Frontend (built separately)
-frontend/
+# Frontend build artifacts only — frontend/ itself MUST stay included because
+# frontend/Dockerfile (context = repo root) needs frontend/src, package.json, etc.
+frontend/node_modules/
+frontend/dist/
 
 # Documentation & plans
 *.md
@@ -45,6 +47,6 @@ logs/
 # GitHub CI
 .github/
 
-# Nginx configs (mounted as volume in prod)
-nginx/
+# (nginx/ is intentionally NOT excluded — frontend/Dockerfile needs
+# nginx/nginx.conf from the build context to bake it into the image)
 

@@ -2,6 +2,7 @@ package com.app.questr.model.entity;
 
 import com.app.questr.model.enums.TaskCategory;
 import com.app.questr.model.enums.TaskPriority;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -46,6 +47,9 @@ public class Task {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
+    // Breaks the User.tasks <-> Task.user cycle for Jackson (defense-in-depth,
+    // same reasoning as UserStats.user — see that file for full explanation).
+    @JsonIgnore
     private User user;
 
     @Column(nullable = false, length = 255)

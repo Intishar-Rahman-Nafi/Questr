@@ -1,0 +1,79 @@
+# =============================================================================
+# Local development overrides
+#
+# Docker Compose automatically merges this file with docker-compose.yml when
+# you run `docker compose up` with NO -f flags. It adds hot-reloading backend
+# + frontend dev services on top of the base infra (postgres/redis/kafka),
+# WITHOUT Nginx — Vite's own dev server + proxy (see frontend/vite.config.ts)
+# handles routing /api/* to the backend during development.
+#
+# Usage:
+#   docker compose up -d           # infra + backend + frontend, all hot-reload
+#   docker compose up -d postgres redis kafka   # infra only (run app locally instead)
+# =============================================================================
+
+services:
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: build          # Stop at the Maven build stage — has JDK + Maven
+    container_name: questr-backend-dev
+    working_dir: /build
+    command: >
+      mvn -B spring-boot:run
+      -Dspring-boot.run.jvmArguments="-Dspring.profiles.active=default"
+    ports:
+      - "8080:8080"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: questr_db
+      DB_USER: admin
+      DB_PASSWORD: secret
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      JWT_SECRET: dev-only-secret-not-for-production-use-32chars
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    volumes:
+      - ./src:/build/src              # bind mount = live-reload on file save
+      - ./pom.xml:/build/pom.xml
+      - maven_repo_cache:/root/.m2    # persist downloaded deps across restarts
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - questr-net
+
+  frontend:
+    image: node:20-alpine
+    container_name: questr-frontend-dev
+    working_dir: /app
+    command: sh -c "npm ci && npm run dev -- --host 0.0.0.0"
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_BASE_URL: http://localhost:8080
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules   # named volume avoids
+                                                    # clobbering node_modules
+                                                    # with the host's (different
+                                                    # OS binaries, e.g. esbuild)
+    depends_on:
+      - backend
+    networks:
+      - questr-net
+
+volumes:
+  maven_repo_cache:
+    driver: local
+  frontend_node_modules:
+    driver: local
+

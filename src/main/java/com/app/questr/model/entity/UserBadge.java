@@ -1,5 +1,6 @@
 package com.app.questr.model.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -41,6 +42,8 @@ public class UserBadge {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
+    // Breaks the User.badges <-> UserBadge.user cycle for Jackson.
+    @JsonIgnore
     private User user;
 
     @ManyToOne(fetch = FetchType.EAGER)   // Badge is tiny; eager is fine here

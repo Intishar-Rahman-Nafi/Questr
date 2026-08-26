@@ -228,7 +228,7 @@ export function DashboardPage() {
           <div className="grid sm:grid-cols-2 gap-4 items-center">
             <CategoryChart data={categoryBreakdown} />
             <div className="space-y-2">
-              {categoryBreakdown.map(c => (
+              {categoryBreakdown.map((c: CategoryBreakdown) => (
                 <div key={c.category} className="flex items-center gap-3">
                   <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: CAT_COLORS[c.category] ?? '#64748b' }} />
                   <span className={cn('text-xs px-2 py-0.5 rounded-full font-medium', `cat-${c.category}`)}>{c.category}</span>
