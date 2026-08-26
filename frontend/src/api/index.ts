@@ -83,6 +83,7 @@ function adaptBadge(raw: any): Badge {
     criteriaType: raw.badgeType ?? raw.criteriaType ?? '',
     rewardXp:     raw.rewardXp ?? 0,
     earnedAt:     raw.earnedAt ?? null,
+    progressHint: raw.progressHint ?? null,
   }
 }
 
@@ -124,7 +125,7 @@ export const dashboardApi = {
     api.get<WeeklyHistory[]>('/dashboard/history', { params: { weeks } }).then(r => r.data),
 }
 
-// ── Challenge field adapter ─────────────��──────────────────────────────────
+// ── Challenge field adapter ──────────────────────────────────────────────────
 // Backend ChallengeResponse: { id, name, description, inviteCode, startDate,
 //   endDate, targetXp, createdById, createdByUsername, createdAt,
 //   participantCount, active, creator, joined }

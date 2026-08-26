@@ -70,7 +70,9 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/auth/signup",
                                  "/api/v1/auth/login",
                                  "/api/v1/auth/refresh").permitAll()
-                .requestMatchers("/actuator/**").permitAll()
+                // Only the liveness/readiness probe is public — everything else
+                // under /actuator (metrics, loggers, etc.) requires a valid token.
+                .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                 .anyRequest().authenticated())
             .authenticationProvider(authenticationProvider())
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

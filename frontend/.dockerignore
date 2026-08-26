@@ -1,0 +1,17 @@
+# QUESTR Frontend — Docker build context exclusions (context = frontend/)
+
+# Installed deps (re-installed via `npm ci` inside the build stage)
+node_modules/
+
+# Build output (produced fresh by `vite build` inside the build stage)
+dist/
+
+# Local env files — never bake dev URLs/secrets into the image. The production
+# build uses the empty VITE_API_BASE_URL build arg for relative /api/ paths.
+.env
+.env.local
+.env.*.local
+
+# Logs & OS artefacts
+*.log
+.DS_Store

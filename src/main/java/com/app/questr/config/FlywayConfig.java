@@ -3,9 +3,9 @@ package com.app.questr.config;
 import org.flywaydb.core.Flyway;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.jpa.autoconfigure.EntityManagerFactoryDependsOnPostProcessor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.DependsOn;
 
 import javax.sql.DataSource;
 
@@ -18,10 +18,12 @@ import javax.sql.DataSource;
  * that the schema is fully migrated before Hibernate validates or uses it.
  *
  * <p>Ordering guarantee: the {@code entityManagerFactory} bean created by
- * Hibernate's auto‑configuration picks up the {@code DataSource} bean. We
- * wrap the migration call inside the {@code flyway} bean's init so it runs as
- * part of normal Spring IoC construction—before any JPA operation tries to
- * touch the database.
+ * Hibernate's auto-configuration picks up the {@code DataSource} bean. We
+ * register an {@link EntityManagerFactoryDependsOnPostProcessor} (the same
+ * mechanism Spring Boot's removed {@code FlywayAutoConfiguration} used) so that
+ * the JPA session factory is built only AFTER the {@code flyway} bean has run
+ * {@code migrate()} — otherwise Hibernate's {@code ddl-auto: validate} races
+ * ahead of Flyway on a fresh database and fails with "missing table".
  *
  * <p>Disable per profile with {@code spring.flyway.enabled=false} (e.g. tests
  * use {@code ddl-auto: create-drop} instead).
@@ -45,13 +47,10 @@ public class FlywayConfig {
     /**
      * Creates and immediately migrates the database schema.
      *
-     * <p>The {@code initMethod = "migrate"} approach is intentional: the
-     * migration runs synchronously during bean initialisation, which Spring
-     * guarantees happens before any bean that depends on {@link DataSource}
-     * (including Hibernate's {@code LocalContainerEntityManagerFactoryBean}).
-     *
-     * <p><b>Note:</b> if you need strict ordering on a custom EMF bean, add
-     * {@code @DependsOn("flyway")} to that bean.
+     * <p>{@code migrate()} runs synchronously inside this bean method, so the
+     * migration completes before the bean is returned. Combined with the
+     * {@link EntityManagerFactoryDependsOnPostProcessor} registered above, this
+     * guarantees Hibernate never validates/uses an un-migrated schema.
      */
     @Bean
     public Flyway flyway(DataSource dataSource) {
@@ -65,6 +64,17 @@ public class FlywayConfig {
 
         flyway.migrate();
         return flyway;
+    }
+
+    /**
+     * Forces Hibernate's {@code entityManagerFactory} to be created after the
+     * {@code flyway} bean. This bean MUST be {@code static} so it is registered
+     * as a {@code BeanFactoryPostProcessor} early in the lifecycle, before any
+     * ordinary bean (including the JPA session factory) is instantiated.
+     */
+    @Bean
+    public static EntityManagerFactoryDependsOnPostProcessor flywayEntityManagerFactoryDependsOnPostProcessor() {
+        return new EntityManagerFactoryDependsOnPostProcessor(Flyway.class);
     }
 }
 

@@ -4,9 +4,12 @@ spring:
 
   # ── Database ─────────────────────────────────────────────────────────────────
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:questr_db}
-    username: ${DB_USER:admin}
-    password: ${DB_PASSWORD:secret}
+    # Railway's managed Postgres injects PGHOST/PGPORT/PGUSER/PGPASSWORD/PGDATABASE;
+    # local Docker Compose / VPS use DB_HOST/DB_PORT/DB_USER/DB_PASSWORD/DB_NAME.
+    # The nested fallbacks make BOTH work with zero manual env remapping.
+    url: jdbc:postgresql://${DB_HOST:${PGHOST:localhost}}:${DB_PORT:${PGPORT:5432}}/${DB_NAME:${PGDATABASE:questr_db}}
+    username: ${DB_USER:${PGUSER:admin}}
+    password: ${DB_PASSWORD:${PGPASSWORD:secret}}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 10
@@ -41,9 +44,11 @@ spring:
   # ── Redis ─────────────────────────────────────────────────────────────────────
   data:
     redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
+      # Railway's managed Redis injects REDISHOST/REDISPORT/REDISPASSWORD;
+      # local Docker Compose / VPS use REDIS_HOST/REDIS_PORT/REDIS_PASSWORD.
+      host: ${REDIS_HOST:${REDISHOST:localhost}}
+      port: ${REDIS_PORT:${REDISPORT:6379}}
+      password: ${REDIS_PASSWORD:${REDISPASSWORD:}}
       timeout: 2000ms
       lettuce:
         pool:
@@ -66,8 +71,6 @@ spring:
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
       acks: all                   # Wait for all replicas to acknowledge
       retries: 3
-      properties:
-        spring.json.add.type.headers: false
     consumer:
       group-id: questr-consumer-group
       auto-offset-reset: earliest
@@ -75,13 +78,17 @@ spring:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
+        # Allow the JsonDeserializer to resolve __TypeId__ headers (added by the
+        # producer's JsonSerializer) back to our event classes.
         spring.json.trusted.packages: "com.app.questr.*"
     listener:
       ack-mode: MANUAL_IMMEDIATE  # Pair with enable-auto-commit: false
 
 # ── Server ──────────────────────────────────────────────────────────────────────
 server:
-  port: ${SERVER_PORT:8080}
+  # Railway injects PORT and expects the app to bind to it; local dev / Compose
+  # use SERVER_PORT. The nested fallback honours both.
+  port: ${PORT:${SERVER_PORT:8080}}
   error:
     include-message: always
     include-binding-errors: always
@@ -111,7 +118,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,loggers
+        include: health,info
       base-path: /actuator
   endpoint:
     health:

@@ -380,7 +380,7 @@ export function ChallengesPage() {
           <button key={t} onClick={() => setTab(t)}
             className={cn('px-5 py-1.5 text-sm font-medium rounded-lg transition-all duration-200',
               tab === t ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-white')}>
-            {t === 'all' ? `Browse (${all.length})` : `My Challenges (${my.length})`}
+            {t === 'all' ? `All (${all.length})` : `My Challenges (${my.length})`}
           </button>
         ))}
       </div>

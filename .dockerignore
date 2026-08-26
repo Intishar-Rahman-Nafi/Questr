@@ -1,5 +1,6 @@
-# QUESTR — Docker build context exclusions
-# Keeps Docker build context lean: only pom.xml + src/ are needed.
+# QUESTR — Docker build context exclusions (applies to the BACKEND Dockerfile,
+# whose context is the repo root). The frontend and kafka services are
+# self-contained directories with their own contexts/.dockerignore files.
 
 # Maven build output (copied from inside the build stage instead)
 target/
@@ -18,6 +19,11 @@ target/
 .project
 .settings/
 
+# Other services — the backend image doesn't need these, and excluding them
+# keeps the build context lean and prevents any stray env files leaking in.
+frontend/
+kafka/
+
 # Docker files (no recursive COPY needed)
 Dockerfile
 Dockerfile.*
@@ -28,11 +34,6 @@ docker-compose*.yml
 .env
 *.env
 !.env.example
-
-# Frontend build artifacts only — frontend/ itself MUST stay included because
-# frontend/Dockerfile (context = repo root) needs frontend/src, package.json, etc.
-frontend/node_modules/
-frontend/dist/
 
 # Documentation & plans
 *.md
@@ -46,7 +47,3 @@ logs/
 
 # GitHub CI
 .github/
-
-# (nginx/ is intentionally NOT excluded — frontend/Dockerfile needs
-# nginx/nginx.conf from the build context to bake it into the image)
-

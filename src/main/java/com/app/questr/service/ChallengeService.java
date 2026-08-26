@@ -82,7 +82,7 @@ public class ChallengeService {
                 .createdBy(user)
                 .build();
 
-        challenge = challengeRepository.save(challenge);
+        challenge = challengeRepository.saveAndFlush(challenge);
 
         // Auto-join the creator
         ChallengeParticipant cp = ChallengeParticipant.builder()

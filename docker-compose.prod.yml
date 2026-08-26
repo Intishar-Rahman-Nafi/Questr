@@ -1,7 +1,7 @@
 # Production Docker Compose — QUESTR
 # Usage: docker compose -f docker-compose.prod.yml up -d
 # All secrets come from environment variables — never hardcoded here.
-# Finalized in Module 10 (Dockerization) with real Dockerfile + nginx.conf.
+# The frontend image bundles its own Nginx config (frontend/nginx.conf.template).
 #
 # IMPORTANT — Project isolation:
 # `name:` below gives this stack its own Compose "project" identity
@@ -143,7 +143,7 @@ services:
           memory: 1G
 
   # ─────────────────────────────────────────────────────────────────────────
-  # Nginx — built from frontend/Dockerfile (Module 10).
+  # Nginx — built from frontend/Dockerfile (self-contained: context = ./frontend).
   # This single image bundles the compiled React static assets AND the Nginx
   # config that reverse-proxies /api/* to the backend container. There's no
   # separate "frontend" service or shared volume needed — the multi-stage
@@ -151,8 +151,8 @@ services:
   # ─────────────────────────────────────────────────────────────────────────
   nginx:
     build:
-      context: .
-      dockerfile: frontend/Dockerfile
+      context: ./frontend
+      dockerfile: Dockerfile
       args:
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
     image: questr-frontend:latest
@@ -160,10 +160,10 @@ services:
     restart: always
     ports:
       - "80:80"
-      # 443 intentionally omitted — nginx.conf only listens on port 80 today.
+      # 443 intentionally omitted — nginx only listens on port 80 today.
       # To add HTTPS: terminate TLS with a tool like Caddy/Traefik in front of
       # this stack, or mount certs + add a `listen 443 ssl;` server block to
-      # nginx/nginx.conf and expose "443:443" here.
+      # nginx.conf.template and expose "443:443" here.
     depends_on:
       backend:
         condition: service_healthy

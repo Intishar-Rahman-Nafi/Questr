@@ -63,7 +63,7 @@ public class TaskService {
                 .xpValue(baseXp)
                 .build();
 
-        Task saved = taskRepository.save(task);
+        Task saved = taskRepository.saveAndFlush(task);
         log.info("Task created: {} (user={})", saved.getId(), userId);
         return toResponse(saved);
     }
