@@ -1,27 +1,28 @@
-name: CI
+name: CI/CD
 
-# Continuous Integration: compile + test the backend, typecheck + build the
-# frontend, and (on pushes to main) build & push Docker images to GHCR.
+# Continuous Integration + Deployment for a single Oracle Cloud VM.
 #
-# Deployment to Railway is handled by Railway's own GitHub integration
-# (connect the repo once, then every push to main auto-builds and deploys the
-# backend, web, and kafka services from their Dockerfiles). No SSH/CLI deploy
-# step is needed here — keep this workflow focused on verification.
+#   Job 1 (test)    — runs on every push & PR: backend tests (Testcontainers)
+#                     + frontend typecheck/build. Gates the deploy.
+#   Job 2 (deploy)  — runs on push to master only, after tests pass: SSHes into
+#                     the VM, pulls the latest code, rebuilds & restarts the
+#                     Docker stack, then waits for the backend healthcheck and
+#                     verifies the public endpoint.
+#
+# Required repository secrets (Settings → Secrets and variables → Actions):
+#   SERVER_HOST     = VM public IP  (e.g. 140.238.100.38)
+#   SERVER_USER     = SSH username  (opc)
+#   SERVER_SSH_KEY  = private key of a dedicated deploy key (no passphrase)
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
-    branches: [main]
-
-env:
-  REGISTRY: ghcr.io
-  BACKEND_IMAGE: ghcr.io/${{ github.repository }}-backend
-  FRONTEND_IMAGE: ghcr.io/${{ github.repository }}-frontend
+    branches: [master]
 
 jobs:
   # ===========================================================================
-  # Job 1 — Test (always runs; gates image builds)
+  # Job 1 — Test (always runs; gates deployment)
   # ===========================================================================
   test:
     runs-on: ubuntu-latest
@@ -52,50 +53,51 @@ jobs:
           npm run build
 
   # ===========================================================================
-  # Job 2 — Build & push Docker images (push to main only, after tests pass).
-  # Optional: useful as a fallback/artifact and for the VPS docker-compose
-  # deployment path. Railway builds its own images from the Dockerfiles.
+  # Job 2 — Deploy (push to master only, after tests pass)
   # ===========================================================================
-  build-and-push:
+  deploy:
     needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
+      - name: Deploy to VM over SSH
+        uses: appleboy/ssh-action@v1.0.3
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            set -e
+            cd ~/questr
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+            # Force-sync tracked files to origin/master (.env is untracked, so
+            # production secrets are never overwritten).
+            git fetch origin master
+            git reset --hard origin/master
 
-      - name: Build & push backend image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          tags: |
-            ${{ env.BACKEND_IMAGE }}:latest
-            ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+            # Rebuild + restart the full stack (Docker layer cache makes this
+            # fast when only app code changed).
+            docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
+            docker image prune -f
 
-      - name: Build & push frontend image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          file: ./frontend/Dockerfile
-          push: true
-          tags: |
-            ${{ env.FRONTEND_IMAGE }}:latest
-            ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+            # Wait for the backend healthcheck to pass (fail loudly if it doesn't).
+            echo "Waiting for backend to become healthy..."
+            healthy=0
+            for i in $(seq 1 24); do
+              status=$(docker inspect --format='{{.State.Health.Status}}' questr-backend-prod 2>/dev/null || echo starting)
+              if [ "$status" = "healthy" ]; then
+                echo "Backend is healthy."
+                healthy=1
+                break
+              fi
+              sleep 5
+            done
+            if [ "$healthy" != "1" ]; then
+              echo "ERROR: backend did not become healthy within 120s"
+              docker compose -f docker-compose.prod.yml logs backend --tail 80
+              exit 1
+            fi
+
+            # Verify the public endpoint serves correctly.
+            curl -sf http://localhost/ -o /dev/null && echo "Frontend serving OK (200)"
+            curl -sf http://localhost/actuator/health && echo ""
