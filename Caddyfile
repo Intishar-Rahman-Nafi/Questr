@@ -1,0 +1,12 @@
+# QUESTR — Caddy reverse proxy
+#
+# Terminates TLS for ${SITE_ADDRESS} (automatic Let's Encrypt certificate via
+# HTTP-01 challenge on port 80) and reverse-proxies all traffic to the nginx
+# container, which serves the SPA and proxies /api to the backend.
+#
+# ${SITE_ADDRESS} is injected from the DOMAIN env var in docker-compose.prod.yml.
+
+{$SITE_ADDRESS} {
+	encode gzip
+	reverse_proxy nginx:80
+}

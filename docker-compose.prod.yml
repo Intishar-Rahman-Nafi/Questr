@@ -159,12 +159,8 @@ services:
     image: questr-frontend:latest
     container_name: questr-nginx-prod
     restart: always
-    ports:
-      - "80:80"
-      # 443 intentionally omitted — nginx only listens on port 80 today.
-      # To add HTTPS: terminate TLS with a tool like Caddy/Traefik in front of
-      # this stack, or mount certs + add a `listen 443 ssl;` server block to
-      # nginx.conf.template and expose "443:443" here.
+    # No host port — nginx is reached only through Caddy, which terminates TLS
+    # on 80/443 and reverse-proxies to nginx over the internal network.
     depends_on:
       backend:
         condition: service_healthy
@@ -177,7 +173,35 @@ services:
       retries: 3
       start_period: 15s
 
+  # ─────────────────────────────────────────────────────────────────────────
+  # Caddy — automatic HTTPS reverse proxy in front of nginx.
+  # Terminates TLS (auto Let's Encrypt cert for ${DOMAIN}) and forwards to
+  # nginx. ${DOMAIN} must be a public domain/subdomain that resolves to this
+  # VM's IP (e.g. a free DuckDNS subdomain) BEFORE Caddy can obtain its cert.
+  # ─────────────────────────────────────────────────────────────────────────
+  caddy:
+    image: caddy:2-alpine
+    container_name: questr-caddy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - nginx
+    networks:
+      - questr-net
+
 volumes:
+  caddy_data:
+    driver: local
+  caddy_config:
+    driver: local
   postgres_data_prod:
     driver: local
   redis_data_prod:
