@@ -167,7 +167,9 @@ public class OpenAIService {
 
     private AIReportResponse generateReport(UUID userId) {
         LocalDate weekStart = LocalDate.now().with(DayOfWeek.MONDAY);
-        LocalDate weekEnd   = weekStart.plusDays(6);
+        // Report covers "this week so far" — from Monday up to today, not the
+        // full Mon–Sun week (which would include future days).
+        LocalDate weekEnd   = LocalDate.now();
 
         try {
             UserStats stats = userStatsRepository.findByUserId(userId)
@@ -223,7 +225,7 @@ public class OpenAIService {
 
         // XP earned this week (approximation using current total — context for GPT)
         return """
-                Here is my productivity data for this week:
+                Here is my productivity data for this week so far (Monday to today):
 
                 Tasks completed : %d out of %d (%.1f%% completion rate)
                 Total XP earned : %d

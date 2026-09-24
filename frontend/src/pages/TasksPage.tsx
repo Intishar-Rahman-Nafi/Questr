@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Plus, Check, Trash2, Zap, Calendar, Filter, X, ChevronDown } from 'lucide-react'
+import { Plus, Check, Trash2, Zap, Calendar, Filter, X, ChevronDown, Search } from 'lucide-react'
 import { toast } from 'sonner'
 import confetti from 'canvas-confetti'
 import { tasksApi } from '@/api'
@@ -31,6 +31,7 @@ const TaskCard = forwardRef<HTMLDivElement, {
   onComplete: (id: string) => void
   onDelete:   (id: string) => void
 }>(function TaskCard({ task, onComplete, onDelete }, ref) {
+  const overdue = !task.completed && !!task.dueDate && new Date(task.dueDate).getTime() < Date.now()
   return (
     <motion.div
       ref={ref}
@@ -77,9 +78,11 @@ const TaskCard = forwardRef<HTMLDivElement, {
         )}
 
         <div className="flex flex-wrap items-center gap-2 mt-2">
-          <span className={cn('text-[11px] px-2 py-0.5 rounded-full font-medium', `cat-${task.category}`)}>
-            {task.category}
-          </span>
+          {task.category && (
+            <span className={cn('text-[11px] px-2 py-0.5 rounded-full font-medium', `cat-${task.category}`)}>
+              {task.category}
+            </span>
+          )}
           <span className={cn('text-[11px] font-medium', PRIORITY_COLORS[task.priority])}>
             {PRIORITY_LABELS[task.priority]}
           </span>
@@ -87,8 +90,12 @@ const TaskCard = forwardRef<HTMLDivElement, {
             <Zap className="w-3 h-3" />{task.xpReward} XP
           </span>
           {task.dueDate && (
-            <span className="flex items-center gap-1 text-[11px] text-slate-500">
-              <Calendar className="w-3 h-3" />{formatRelative(task.dueDate)}
+            <span className={cn(
+              'flex items-center gap-1 text-[11px]',
+              overdue ? 'text-red-400 font-medium' : 'text-slate-500',
+            )}>
+              <Calendar className="w-3 h-3" />
+              {overdue ? 'Overdue · ' : ''}{formatRelative(task.dueDate)}
             </span>
           )}
         </div>
@@ -221,6 +228,7 @@ export function TasksPage() {
   const [tab,        setTab]       = useState<FilterTab>('active')
   const [catFilter,  setCatFilter] = useState<TaskCategory | 'all'>('all')
   const [priFilter,  setPriFilter] = useState<TaskPriority | 'all'>('all')
+  const [search,     setSearch]    = useState('')
 
   const { data: rawTasks, isLoading } = useQuery({
     queryKey: queryKeys.tasks(),
@@ -254,10 +262,24 @@ export function TasksPage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: queryKeys.tasks() }); toast.info('Quest removed') },
   })
 
+  const searchTerm = search.trim().toLowerCase()
   const filtered = tasks
     .filter(t => tab === 'all' ? true : tab === 'active' ? !t.completed : t.completed)
     .filter(t => catFilter === 'all' ? true : t.category === catFilter)
     .filter(t => priFilter === 'all' ? true : t.priority === priFilter)
+    .filter(t => !searchTerm || t.title.toLowerCase().includes(searchTerm) || (t.description ?? '').toLowerCase().includes(searchTerm))
+    .sort((a, b) => {
+      // Overdue (incomplete & past due) first
+      const aOver = !a.completed && !!a.dueDate && new Date(a.dueDate).getTime() < Date.now() ? 1 : 0
+      const bOver = !b.completed && !!b.dueDate && new Date(b.dueDate).getTime() < Date.now() ? 1 : 0
+      if (aOver !== bOver) return bOver - aOver
+      // Then by due date ascending (no due date = last)
+      const aDue = a.dueDate ? new Date(a.dueDate).getTime() : Infinity
+      const bDue = b.dueDate ? new Date(b.dueDate).getTime() : Infinity
+      if (aDue !== bDue) return aDue - bDue
+      // Then newest first
+      return new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime()
+    })
 
   const activeCount = tasks.filter(t => !t.completed).length
   const doneCount   = tasks.filter(t =>  t.completed).length
@@ -289,10 +311,19 @@ export function TasksPage() {
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-[180px] max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search quests..."
+            className="w-full text-xs bg-white/5 border border-white/10 rounded-lg pl-8 pr-3 py-2 text-slate-300 outline-none focus:border-brand-500/50 transition-colors"
+          />
+        </div>
         <Filter className="w-4 h-4 text-slate-500 flex-shrink-0" />
         <div className="relative">
           <select value={catFilter} onChange={e => setCatFilter(e.target.value as any)}
-            className="text-xs bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-slate-300 cursor-pointer outline-none focus:border-brand-500/50 appearance-none pr-7">
+            className="text-xs bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-slate-300 cursor-pointer outline-none focus:border-brand-500/50 appearance-none pr-7">
             <option value="all">All categories</option>
             {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
@@ -300,14 +331,14 @@ export function TasksPage() {
         </div>
         <div className="relative">
           <select value={priFilter} onChange={e => setPriFilter(e.target.value as any)}
-            className="text-xs bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-slate-300 cursor-pointer outline-none focus:border-brand-500/50 appearance-none pr-7">
+            className="text-xs bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-slate-300 cursor-pointer outline-none focus:border-brand-500/50 appearance-none pr-7">
             <option value="all">All priorities</option>
             {PRIORITIES.map(p => <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>)}
           </select>
           <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500 pointer-events-none" />
         </div>
-        {(catFilter !== 'all' || priFilter !== 'all') && (
-          <button onClick={() => { setCatFilter('all'); setPriFilter('all') }}
+        {(catFilter !== 'all' || priFilter !== 'all' || searchTerm) && (
+          <button onClick={() => { setCatFilter('all'); setPriFilter('all'); setSearch('') }}
             className="text-xs text-slate-500 hover:text-white flex items-center gap-1 transition-colors">
             <X className="w-3 h-3" />Clear
           </button>

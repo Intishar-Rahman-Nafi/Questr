@@ -9,7 +9,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/store/authStore'
 import { cn } from '@/lib/cn'
 import { toast } from 'sonner'
-import { dashboardApi, achievementsApi, challengesApi } from '@/api'
+import { dashboardApi, achievementsApi, challengesApi, tasksApi, reportApi } from '@/api'
 import { queryKeys } from '@/lib/queryKeys'
 
 const NAV = [
@@ -147,6 +147,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     qc.prefetchQuery({ queryKey: queryKeys.achievements, queryFn: achievementsApi.list })
     qc.prefetchQuery({ queryKey: queryKeys.challenges(), queryFn: challengesApi.list })
     qc.prefetchQuery({ queryKey: queryKeys.myChallenges, queryFn: challengesApi.my })
+    qc.prefetchQuery({ queryKey: queryKeys.tasks(),      queryFn: () => tasksApi.list() })
+    qc.prefetchQuery({ queryKey: queryKeys.report,       queryFn: () => reportApi.get() })
   }, [qc])
 
   return (
@@ -189,13 +191,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
         {/* Page */}
         <main className="flex-1 overflow-y-auto pb-20 lg:pb-0">
-          <AnimatePresence mode="wait">
+          <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={location.pathname}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{   opacity: 0 }}
-              transition={{ duration: 0.1 }}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
               className="min-h-full"
             >
               {children}

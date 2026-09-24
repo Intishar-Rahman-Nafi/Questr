@@ -274,7 +274,7 @@ class ReportControllerTest {
     }
 
     @Test @Order(5)
-    @DisplayName("GET /weekly → weekStart is Monday, weekEnd is Sunday, weekEnd > weekStart")
+    @DisplayName("GET /weekly → weekStart is Monday, weekEnd is today (this week so far), weekEnd >= weekStart")
     void getWeeklyReport_weekDatesAreCorrect() throws Exception {
         enqueueValidResponse();
 
@@ -288,8 +288,8 @@ class ReportControllerTest {
 
         assertThat(weekStart).isNotBlank();
         assertThat(weekEnd).isNotBlank();
-        // weekEnd must be after weekStart (Sunday > Monday)
-        assertThat(weekEnd.compareTo(weekStart)).isGreaterThan(0);
+        // weekEnd (today) must be on/after weekStart (Monday) — "this week so far"
+        assertThat(weekEnd.compareTo(weekStart)).isGreaterThanOrEqualTo(0);
     }
 
     @Test @Order(6)

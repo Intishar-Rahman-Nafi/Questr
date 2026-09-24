@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
 import { AppLayout } from '@/components/layout/AppLayout'
@@ -38,6 +38,22 @@ function Public({ children }: { children: React.ReactNode }) {
 }
 
 export function AppRouter() {
+  // Preload every route chunk in the background shortly after mount, so tab
+  // navigation is instant with no full-screen Suspense flash on first visit.
+  useEffect(() => {
+    const id = setTimeout(() => {
+      import('@/pages/LoginPage')
+      import('@/pages/SignupPage')
+      import('@/pages/DashboardPage')
+      import('@/pages/TasksPage')
+      import('@/pages/AchievementsPage')
+      import('@/pages/ChallengesPage')
+      import('@/pages/ChallengeDetailPage')
+      import('@/pages/ReportPage')
+    }, 400)
+    return () => clearTimeout(id)
+  }, [])
+
   return (
     <Suspense fallback={<PageLoader />}>
       <Routes>

@@ -150,13 +150,12 @@
     animation: shimmer 2s linear infinite;
   }
 
-  /* ── Category badges ──────────────────────────────────────────── */
+  /* ── Category badges (matches TaskCategory enum) ──────────────── */
   .cat-WORK      { background: rgba(59,130,246,0.15); color: #93c5fd; }
   .cat-PERSONAL  { background: rgba(168,85,247,0.15); color: #d8b4fe; }
-  .cat-FITNESS   { background: rgba(34,197,94,0.15);  color: #86efac; }
+  .cat-HEALTH    { background: rgba(34,197,94,0.15);  color: #86efac; }
   .cat-LEARNING  { background: rgba(245,158,11,0.15); color: #fcd34d; }
-  .cat-HEALTH    { background: rgba(239,68,68,0.15);  color: #fca5a5; }
-  .cat-SOCIAL    { background: rgba(236,72,153,0.15); color: #f9a8d4; }
+  .cat-DEV       { background: rgba(6,182,212,0.15);  color: #67e8f9; }
   .cat-OTHER     { background: rgba(100,116,139,0.15);color: #94a3b8; }
 
   /* ── Priority dots ────────────────────────────────────────────── */
